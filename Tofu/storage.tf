@@ -15,7 +15,6 @@ resource "libvirt_volume" "base_image" {
   }
 }
 
-
 resource "libvirt_volume" "vm_disk" {
   for_each = var.VMS
 
