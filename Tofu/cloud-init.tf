@@ -11,7 +11,8 @@ manage_etc_hosts: true
 
 users:
   - default
-  - name: ubuntu
+  - name: myuser
+    groups: sudo
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/bash
     ssh_authorized_keys:
