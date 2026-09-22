@@ -26,7 +26,7 @@ variable "vm_base_template_name" {
 variable "vm_base_image_path" {
     description = "Path to the local QCOW2 base image"
     type        = string
-    default     = "/srv/vms/virtual_machines/al9.8-base.qcow2"
+    default     = "/srv/vms/templates/al9.8-base.qcow2"
 
 }
 
