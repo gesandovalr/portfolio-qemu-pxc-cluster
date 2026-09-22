@@ -36,28 +36,41 @@ variable "ssh_public_key" {
     default     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEgInN0JnG0h1EtCcT/1cC+8mpQw6d1dpVku/f4pPP1K gesora@odin"
 }
 
+variable "vm_network_name" {
+  description = "Existing libvirt network used by the VMs"
+  type        = string
+  default     = "LAN"
+}
 
 variable "VMS" {
   type = map(object({
     name         = string
+    memory       = number
+    vcpu         = number
     ipv4_add_nic = string
-    netmask      = string
+    netmask      = number
   }))
   default = {
     PERCDBTEST01 = {
       name         = "PERCDBTEST01"
+      memory       = 2048
+      vcpu         = 2
       ipv4_add_nic = "10.20.10.10"
-      netmask      = "255.255.255.0"
+      netmask      = 24
     },
     PERCDBTEST02 = {
       name         = "PERCDBTEST02"
+      memory       = 2048
+      vcpu         = 2  
       ipv4_add_nic = "10.20.10.11"
-      netmask      = "255.255.255.0"
+      netmask      = 24
     },
     PERCDBTEST03 = {
       name         = "PERCDBTEST03"
+      memory       = 2048
+      vcpu         = 2
       ipv4_add_nic = "10.20.10.12"
-      netmask      = "255.255.255.0"
+      netmask      = 24
     }
   }
 }
