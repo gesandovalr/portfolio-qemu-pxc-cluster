@@ -30,6 +30,13 @@ variable "vm_base_image_path" {
 
 }
 
+variable "ssh_public_key" {
+    description = "Public SSH key for the VMs"
+    type        = string
+    default     = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEgInN0JnG0h1EtCcT/1cC+8mpQw6d1dpVku/f4pPP1K gesora@odin"
+}
+
+
 variable "VMS" {
   type = map(object({
     name         = string

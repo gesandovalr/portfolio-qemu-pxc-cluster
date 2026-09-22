@@ -8,6 +8,18 @@ resource "libvirt_cloudinit_config" "commoninit" {
 #cloud-config
 hostname: ${each.value.name}
 manage_etc_hosts: true
+
+users:
+  - default
+  - name: ubuntu
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ${var.ssh_public_key}
+
+ssh_authorized_keys:
+  - ${var.ssh_public_key}
+
 EOF
 
   # This configures the network interface explicitly with your static IP inside the VM
