@@ -1,3 +1,35 @@
+locals {
+  cloud_init_user_data = {
+    preserve_hostname = false
+    manage_etc_hosts  = true
+
+    users = [
+      {
+        name        = "almalinux"
+        lock_passwd = false
+        sudo        = ["ALL=(ALL) NOPASSWD:ALL"]
+        groups      = ["wheel"]
+        shell       = "/bin/bash"
+      }
+    ]
+
+    chpasswd = {
+      expire = false
+
+      users = [
+        {
+          name     = "almalinux"
+          password = var.vm_user_password_hash
+          type     = "hash"
+        }
+      ]
+    }
+
+    ssh_pwauth   = true
+    disable_root = true
+  }
+}
+
 resource "libvirt_cloudinit_disk" "commoninit" {
   for_each = var.VMS
 
@@ -8,33 +40,26 @@ resource "libvirt_cloudinit_disk" "commoninit" {
     local-hostname = each.value.name
   })
 
-  user_data = <<-EOF
-    #cloud-config
+  user_data = "#cloud-config\n${yamlencode(merge(
+    local.cloud_init_user_data,
+    {
+      hostname = each.value.name
+    }
+  ))}"
 
-    hostname: ${each.value.name}
-    manage_etc_hosts: true
+  network_config = yamlencode({
+    version = 2
 
-    users:
-      - default
-      - name: myuser
-        groups:
-          - sudo
-        sudo: ALL=(ALL) NOPASSWD:ALL
-        shell: /bin/bash
-        ssh_authorized_keys:
-          - ${var.ssh_public_key}
+    ethernets = {
+      eth0 = {
+        dhcp4 = false
 
-    ssh_pwauth: false
-  EOF
-
-  network_config = <<-EOF
-    version: 2
-    ethernets:
-      ens3:
-        dhcp4: false
-        addresses:
-          - ${each.value.ipv4_add_nic}/${each.value.netmask}
-  EOF
+        addresses = [
+          "${each.value.ipv4_add_nic}/${each.value.netmask}"
+        ]
+      }
+    }
+  })
 }
 
 resource "libvirt_volume" "cloudinit_iso" {
@@ -43,15 +68,21 @@ resource "libvirt_volume" "cloudinit_iso" {
   name = "${each.key}-cloudinit.iso"
   pool = var.vm_pool_name
 
-  target = {
-    format = {
-      type = "raw"
-    }
-  }
-
   create = {
     content = {
       url = libvirt_cloudinit_disk.commoninit[each.key].path
     }
   }
+
+  target = {
+    permissions = {
+      owner = "1000"
+      group = "1000"
+      mode  = "0644"
+    }
+  }
+
+  depends_on = [
+    libvirt_cloudinit_disk.commoninit
+  ]
 }

@@ -4,21 +4,20 @@
 variable "vm_pool_name" {
   description = "Name of the libvirt storage pool"
   type        = string
-  default     = "vms-templates"
+  default     = "Virtual_Machines"
 }
 
 ## Define Storage Pool Path
 variable "vm_pool_path" {
   description = "Filesystem path used by the libvirt storage pool"
   type        = string
-  default     = "/srv/vms/virtual_machines"
+  default     = "/home/gesora/virtual_machines/VMs"
 }
 
 ## Define base image path
 variable "vm_base_template_name" {
     description = "name of the local QCOW2 base image"
     type        = string
-    default     = "al9.8-base.qcow2"
 
 }
 
@@ -26,8 +25,6 @@ variable "vm_base_template_name" {
 variable "vm_base_image_path" {
     description = "Path to the local QCOW2 base image"
     type        = string
-    default     = "/srv/vms/templates/al9.8-base.qcow2"
-
 }
 
 variable "ssh_public_key" {
@@ -40,6 +37,18 @@ variable "vm_network_name" {
   description = "Existing libvirt network used by the VMs"
   type        = string
   default     = "LAN"
+}
+
+variable "vm_disk_capacity" {
+  description = "Existing libvirt network used by the VMs"
+  type        = number
+  default     = "50"
+}
+
+variable "vm_user_password_hash" {
+  description = "Password hash for the VM user"
+  type        = string
+  sensitive   = true
 }
 
 variable "VMS" {
