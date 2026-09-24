@@ -1,0 +1,14 @@
+[Unit]
+Description="Vault Token Rotation Service"
+After=vault-agent.service
+Wants=vault-agent.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/vault
+ExecStart=/opt/vault/vault_token_rotation.sh
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,54 @@
+---
+  - name: Add Hashicorp repo
+    become: true
+    shell: yum-config-manager --add-repo https://rpm.releases.hashicorp.com/RHEL/hashicorp.repo
+    register: result
+
+  - name: install vault agent
+    ansible.builtin.dnf:
+      name: vault
+      state: latest
+
+  - name: create vault dirs
+    become: true
+    ansible.builtin.file:
+      path: /opt/vault
+      state: directory
+      owner: vault
+      group: vault
+
+  - name: Add J2 template for vault agent
+    template:
+      src: templates/vault_agent.conf.j2
+      dest: "/etc/vault.d/vault-agent.hcl"
+      owner: vault
+      group: vault
+      mode: '0644'
+  
+  - name: Add J2 template for Role ID
+    template:
+      src: templates/role_id.j2
+      dest: "/opt/vault/.role_id"
+      owner: vault
+      group: vault
+      mode: '0644'
+
+  - name: Add J2 template for Secret ID
+    template:
+      src: templates/secret_id.j2
+      dest: "/opt/vault/.secret_id"
+      owner: vault
+      group: vault
+      mode: '0644'
+  
+  - name: Add J2 template for vault agent systemd
+    template:
+      src: templates/systemd_vault.j2
+      dest: "/usr/lib/systemd/system/vault-agent.service"
+      mode: '0644'
+  
+  - name: Add J2 template for vault token rotation
+    template:
+      src: templates/systemd_token_rotation.j2
+      dest: "/usr/lib/systemd/system/token-rotation.service"
+      mode: '0644'

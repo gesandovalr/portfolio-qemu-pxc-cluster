@@ -6,26 +6,18 @@ locals {
     users = [
       {
         name        = "almalinux"
-        lock_passwd = false
+        lock_passwd = true
         sudo        = ["ALL=(ALL) NOPASSWD:ALL"]
         groups      = ["wheel"]
         shell       = "/bin/bash"
+
+        ssh_authorized_keys = [
+          var.vm_ssh_public_key
+        ]
       }
     ]
 
-    chpasswd = {
-      expire = false
-
-      users = [
-        {
-          name     = "almalinux"
-          password = var.vm_user_password_hash
-          type     = "hash"
-        }
-      ]
-    }
-
-    ssh_pwauth   = true
+    ssh_pwauth   = false
     disable_root = true
   }
 }
@@ -44,6 +36,7 @@ resource "libvirt_cloudinit_disk" "commoninit" {
     local.cloud_init_user_data,
     {
       hostname = each.value.name
+      fqdn     = "${each.value.name}.${var.vm_domain_name}"
     }
   ))}"
 
@@ -57,6 +50,24 @@ resource "libvirt_cloudinit_disk" "commoninit" {
         addresses = [
           "${each.value.ipv4_add_nic}/${each.value.netmask}"
         ]
+
+        routes = [
+          {
+            to  = "0.0.0.0/0"
+            via = var.vm_gateway
+          }
+        ]
+
+        nameservers = {
+          addresses = [
+            "8.8.8.8",
+            "8.8.4.4"
+          ]
+
+          search = [
+            var.vm_domain_name
+          ]
+        }
       }
     }
   })

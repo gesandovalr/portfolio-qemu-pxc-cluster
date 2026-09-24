@@ -1,0 +1,60 @@
+[client]
+socket=/var/lib/mysql/mysql.sock
+
+[mysqld]
+early-plugin-load="keyring_vault=keyring_vault.so"
+loose-keyring_vault_config="/var/lib/mysql-keyring/keyring_vault.conf"
+binlog_encryption=ON
+binlog_rotate_encryption_master_key_at_startup=OFF
+innodb_redo_log_encrypt=ON
+innodb_undo_log_encrypt=ON
+default_table_encryption=ON
+table_encryption_privilege_check=ON
+
+server-id=1
+datadir=/var/lib/mysql
+socket=/var/lib/mysql/mysql.sock
+log-error=/var/log/mysqld.log
+pid-file=/var/run/mysqld/mysqld.pid
+skip-name-resolve = on
+default-authentication-plugin=mysql_native_password
+
+# Binary log expiration period is 604800 seconds, which equals 7 days
+binlog_expire_logs_seconds=604800
+
+######## wsrep ###############
+# Path to Galera library
+wsrep_provider=/usr/lib64/galera4/libgalera_smm.so
+
+# Cluster connection URL contains IPs of nodes
+#If no IP is found, this implies that a new cluster needs to be created,
+#in order to do that you need to bootstrap this node
+wsrep_cluster_address=gcomm://{{var_group.percona_node_01_ip_address}},{{var_group.percona_node_02_ip_address}},{{var_group.percona_node_03_ip_address}}
+
+# In order for Galera to work correctly binlog format should be ROW
+binlog_format=ROW
+
+# Slave thread to use
+wsrep_slave_threads=8
+wsrep_log_conflicts
+
+# This changes how InnoDB autoincrement locks are managed and is a requirement for Galera
+innodb_autoinc_lock_mode=2
+
+# Node IP address
+wsrep_node_address={{var_group.percona_node_01_ip_address}}
+
+# Cluster name
+wsrep_cluster_name={{var_group.wsrep_cluster_name}}
+
+#If wsrep_node_name is not specified,  then system hostname will be used
+wsrep_node_name={{var_group.percona_node_01_hostname}}
+
+#pxc_strict_mode allowed values: DISABLED,PERMISSIVE,ENFORCING,MASTER
+pxc_strict_mode=PERMISSIVE
+
+#PXC Encrypt Cluster Traffic
+pxc-encrypt-cluster-traffic=ON
+
+# SST method
+wsrep_sst_method=xtrabackup-v2

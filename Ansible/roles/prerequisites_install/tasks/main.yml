@@ -1,0 +1,44 @@
+--- 
+  #- name: pre-tasks update before deployment
+  #  ansible.builtin.dnf:
+  #    name: "*"
+  #    state: latest
+  #    security: true
+  
+  - name: Import key for epel repo
+    ansible.builtin.rpm_key:
+      state: present
+      key: https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-9
+  
+  - name: Ensure epel repo present
+    ansible.builtin.dnf:
+      name: https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+      state: present
+ 
+  - name: Install jq
+    ansible.builtin.dnf:
+      name: jq
+      state: present
+
+  - name: Install yum utils
+    ansible.builtin.dnf:
+      name: yum-utils
+      state: present
+  
+  - name: Install Firewalld
+    ansible.builtin.dnf:
+      name: firewalld
+      state: present
+ 
+  - name: install python3-pip
+    ansible.builtin.dnf:
+      name: python3-pip
+      state: latest
+  
+  - name: Install python module pymysql
+    ansible.builtin.pip:
+      name: pymysql
+      state: latest
+
+  #- name: Reboot Machines after updates
+  #  reboot:

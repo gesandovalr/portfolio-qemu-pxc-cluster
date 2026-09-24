@@ -1,0 +1,11 @@
+#!/bin/bash
+
+## Get Token from Hashicorp vault ##
+systemctl restart vault-agent
+
+## Change Working Dir
+cd /opt/vault
+
+## Add Token Value on Keyvault.conf file ##
+get_token=$(sed -n '1'p approle_token)
+sed -i '4s/.*/token = '"$get_token"'/' /var/lib/mysql-keyring/keyring_vault.conf

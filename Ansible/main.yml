@@ -1,0 +1,87 @@
+---
+  - hosts: all
+    become: true
+    vars_files:
+      - group_vars/deploy_info.yaml
+      - secrets/secrets.yml
+   
+    roles:
+      - prerequisites_install
+
+############# Percona Bootstraper Role Install for Server Node 01 #############
+
+  - hosts: all
+    become: true
+    vars_files:
+      - group_vars/deploy_info.yaml
+      - secrets/secrets.yml  
+         
+    roles:
+      - percona_install
+      #- vault_agent
+     
+  - hosts: all
+    become: true  
+    vars_files:
+      - group_vars/deploy_info.yaml
+      - secrets/secrets.yml
+    
+    #vars:
+    #  source_file: /opt/vault/approle_token
+    #  destination_file: /var/lib/mysql-keyring/keyring_vault.conf
+    #  search_text: "token ="  
+    
+    roles:
+      - percona_bootstraper
+
+############# Keyring Install for Servers #############    
+  
+  #- hosts: all
+    #become: true
+    #vars_files:
+      #- group_vars/deploy_info.yaml
+      #- secrets/secrets.yml
+
+    #vars:
+      #source_file: /opt/vault/approle_token
+      #destination_file: /var/lib/mysql-keyring/keyring_vault.conf
+      #search_text: "token ="
+
+    #roles:
+    #  - keyring_install
+
+############# Fetch certificate Files and copy them to buffer #############
+
+  - hosts: all
+    become: true
+    vars_files:
+      - group_vars/deploy_info.yaml
+
+    roles:
+      - certificates_copy
+
+############# Initialize databases #############
+
+  - hosts: all
+    become: true
+    vars_files:
+      - group_vars/deploy_info.yaml
+
+    roles:
+      - database_init_start
+
+############# SSH-Permissions #############
+
+  - hosts: all
+    become: true
+
+    roles:
+      - ssh_permissions   
+
+############# Clear Facts Data #############
+
+  - hosts: all
+    become: true
+    tasks: 
+     - name: Clear gathered facts from all currently targeted hosts
+       ansible.builtin.meta: clear_facts

@@ -1,0 +1,158 @@
+---
+  - name: Fetch the file from the percdbprd01 and copy to buffer
+    run_once: true
+    fetch: src=/var/lib/mysql/ca-key.pem dest=buffer/ flat=yes
+    when: ansible_hostname in [var_group.percona_node_01_short_name]
+
+  - name: Fetch the file from the percdbprd01 and copy to buffer
+    run_once: true
+    fetch: src=/var/lib/mysql/ca.pem dest=buffer/ flat=yes
+    when: ansible_hostname in [var_group.percona_node_01_short_name]
+
+  - name: Fetch the file from the percdbprd01 and copy to buffer
+    run_once: true
+    fetch: src=/var/lib/mysql/client-cert.pem dest=buffer/ flat=yes
+    when: ansible_hostname in [var_group.percona_node_01_short_name]
+
+  - name: Fetch the file from the percdbprd01 and copy to buffer
+    run_once: true
+    fetch: src=/var/lib/mysql/client-key.pem dest=buffer/ flat=yes
+    when: ansible_hostname in [var_group.percona_node_01_short_name]
+
+  - name: Fetch the file from the percdbprd01 and copy to buffer
+    run_once: true
+    fetch: src=/var/lib/mysql/private_key.pem dest=buffer/ flat=yes
+    when: ansible_hostname in [var_group.percona_node_01_short_name]
+    
+  - name: Fetch the file from the percdbprd01 and copy to buffer
+    run_once: true
+    fetch: src=/var/lib/mysql/public_key.pem dest=buffer/ flat=yes
+    when: ansible_hostname in [var_group.percona_node_01_short_name]
+
+  - name: Fetch the file from the percdbprd01 and copy to buffer
+    run_once: true
+    fetch: src=/var/lib/mysql/server-cert.pem dest=buffer/ flat=yes
+    when: ansible_hostname in [var_group.percona_node_01_short_name]
+
+  - name: Fetch the file from the percdbprd01 and copy to buffer
+    run_once: true
+    fetch: src=/var/lib/mysql/server-key.pem dest=buffer/ flat=yes
+    when: ansible_hostname in [var_group.percona_node_01_short_name]
+
+############# Copy Certificate Files from Ansible Buffer to node 02/03 #############
+
+  - name: Copy the file from buffer/ca-key.pem to node02/node03
+    copy: src=buffer/ca-key.pem dest=/var/lib/mysql/
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+ 
+  - name: Copy the file from buffer/ca.pem to node02/node03
+    copy: src=buffer/ca.pem dest=/var/lib/mysql/
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+
+  - name: Copy the file from buffer/client-cert.pem  to node02/node03 
+    copy: src=buffer/client-cert.pem dest=/var/lib/mysql/
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+
+  - name: Copy the file from buffer/client-key.pem to node02/node03
+    copy: src=buffer/client-key.pem dest=/var/lib/mysql/
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+
+  - name: Copy the file from buffer/private_key.pem to node02/node03
+    copy: src=buffer/private_key.pem dest=/var/lib/mysql/
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+
+  - name: Copy the file from buffer/public_key.pem to node02/node03
+    copy: src=buffer/public_key.pem dest=/var/lib/mysql/
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+ 
+  - name: Copy the file from buffer/server-cert.pem to node02/node03
+    copy: src=buffer/server-cert.pem dest=/var/lib/mysql/
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+  
+  - name: Copy the file from buffer/server-key.pem to node02/node03
+    copy: src=buffer/server-key.pem dest=/var/lib/mysql/
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+
+  - name: Change file ownership, group and permissions for ca-key.pem
+    ansible.builtin.file:
+      path: /var/lib/mysql/ca-key.pem
+      owner: mysql
+      group: mysql
+      mode: '0600'
+    ##when: ansible_hostname == [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+
+  - name: Change file ownership, group and permissions for ca.pem 
+    ansible.builtin.file:
+      path: /var/lib/mysql/ca.pem
+      owner: mysql
+      group: mysql
+      mode: '0644'
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+      
+  - name: Change file ownership group and permissions for client-cert.pem
+    ansible.builtin.file:
+      path: /var/lib/mysql/client-cert.pem
+      owner: mysql
+      group: mysql
+      mode: '0644'
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+      
+  - name: Change file ownership, group and permissions for client-key.pem
+    ansible.builtin.file:
+      path: /var/lib/mysql/client-key.pem
+      owner: mysql
+      group: mysql
+      mode: '0600'
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+      
+  - name: Change file ownership, group and permissions for private_key.pem
+    ansible.builtin.file:
+      path: /var/lib/mysql/private_key.pem
+      owner: mysql
+      group: mysql
+      mode: '0600'
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+      
+  - name: Change file ownership, group and permissions for public_key.pem
+    ansible.builtin.file:
+      path: /var/lib/mysql/public_key.pem
+      owner: mysql
+      group: mysql
+      mode: '0644'
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+      
+  - name: Change file ownership, group and permissions for server-cert.pem
+    ansible.builtin.file:
+      path: /var/lib/mysql/server-cert.pem
+      owner: mysql
+      group: mysql
+      mode: '0644'
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+      
+  - name: Change file ownership, group and permissions for server-key.pem
+    ansible.builtin.file:
+      path: /var/lib/mysql/server-key.pem
+      owner: mysql
+      group: mysql
+      mode: '0600'
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+      
+  - name: restorecon certificate Files
+    shell: chdir=/var/lib/mysql restorecon -v *.pem
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+      
+  - name: Change file ownership, group and permissions for ca-key.pem
+    ansible.builtin.file:
+      path: /var/lib/mysql/ca-key.pem
+      owner: mysql
+      group: mysql
+      mode: '0600'
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+  
+  - name: create pid file for mysql
+    ansible.builtin.file:
+      path: /var/run/mysqld/mysqld.pid
+      owner: mysql
+      group: mysql
+      state: touch

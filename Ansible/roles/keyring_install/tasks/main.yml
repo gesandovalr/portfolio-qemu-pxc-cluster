@@ -1,0 +1,97 @@
+---
+  - name: Add J2 template for Percona my.cnf node02
+    template:
+      src: templates/encryption-percona-node-02.cnf.j2
+      dest: "/etc/my.cnf"
+    when: ansible_hostname in [var_group.percona_node_02_short_name]
+
+  - name: Add J2 template for Percona my.cnf node03
+    template:
+      src: templates/encryption-percona-node-03.cnf.j2
+      dest: "/etc/my.cnf"
+    when: ansible_hostname in [var_group.percona_node_03_short_name]  
+    
+  - name: Add J2 template for keyring
+    template:
+      src: templates/node-02-keyring-vault.conf.j2
+      dest: "/var/lib/mysql-keyring/keyring_vault.conf"
+      owner: mysql
+      group: mysql
+      mode: '0644'
+    when: ansible_hostname in [var_group.percona_node_02_short_name]
+
+  - name: Add J2 template for keyring
+    template:
+      src: templates/node-03-keyring-vault.conf.j2
+      dest: "/var/lib/mysql-keyring/keyring_vault.conf"
+      owner: mysql
+      group: mysql
+      mode: '0644'
+    when: ansible_hostname in [var_group.percona_node_03_short_name]
+      
+  - name: Add J2 template for Vault token rotation script
+    template:
+      src: templates/vault-token-rotation.sh.j2
+      dest: "/opt/vault/vault_token_rotation.sh"
+      mode: a+x
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+      
+  - name: Run CRON get token renewal for approle
+    become: true        
+    cron:
+      name: "approle_hashicorp_token_renewal"
+      user: "root"
+      weekday: "*"
+      minute: "*"
+      hour: "1"
+      job: "/opt/vault/vault_token_rotation.sh"
+      state: present
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+         
+  - name: System Daemon Reload
+    shell: systemctl daemon-reload
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+      
+  - name:  Ensure token-rotation service is enabled
+    shell: systemctl enable token-rotation
+    async: 1000
+    poll: 5
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+
+  - name:  Ensure token rotation is started
+    shell: systemctl start token-rotation
+    async: 1000
+    poll: 5
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+
+  - name:  Ensure vault-agent service is enabled
+    shell: systemctl enable vault-agent
+    async: 1000
+    poll: 5
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+     
+  - name:  Ensure vault-agent service is started and approle_token is generated.
+    shell: systemctl start vault-agent
+    async: 1000
+    poll: 5
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+
+  - name: Get token
+    shell: "cat {{ source_file }}"
+    register: token
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+
+  - name: Add Token Value on Keyring Conf File
+    lineinfile:
+      path: "{{ destination_file }}"
+      regexp: "{{ search_text }}"
+      line: "{{ search_text }} {{ token.stdout }}"
+      backup: yes
+      insertafter: yes
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+      
+  - name: restore context keyring_vault.conf file
+    shell: restorecon -v /var/lib/mysql-keyring/keyring_vault.conf
+    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+
+  

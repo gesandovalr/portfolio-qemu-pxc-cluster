@@ -1,0 +1,147 @@
+
+---
+## Add Percona encryption configuration File for DB
+  - name: Add J2 template for bootstraper config encrypted
+    template:
+      src: templates/encryption-percona-node-01.cnf.j2
+      dest: "/etc/my.cnf"
+    when: ansible_hostname in var_group['percona_node_01_short_name']
+
+## Add Percona encryption configuration File for DB
+  - name: Add J2 template for bootstraper config encrypted
+    template:
+      src: templates/encryption-percona-node-02.cnf.j2
+      dest: "/etc/my.cnf"
+    when: ansible_hostname in var_group['percona_node_02_short_name']
+  
+## Add Percona encryption configuration File for DB
+  - name: Add J2 template for bootstraper config encrypted
+    template:
+      src: templates/encryption-percona-node-03.cnf.j2
+      dest: "/etc/my.cnf"
+    when: ansible_hostname in var_group['percona_node_03_short_name']
+
+## Remember to use setsebool -P mysql_connect_any 1 on linux to make use of the vault
+  - name: Set mysql_can_network_any flag on and keep it persistent across reboots
+    ansible.posix.seboolean:
+      name: mysql_connect_any
+      state: true
+      persistent: true
+    when: ansible_hostname in var_group['percona_node_01_short_name']
+
+## Add Keyring configuration for vault agent    
+  #- name: Add J2 template for keyring
+  #  template:
+  #    src: templates/node-01-keyring-vault.conf.j2
+  #    dest: "/var/lib/mysql-keyring/keyring_vault.conf"
+  #    owner: mysql
+  #    group: mysql
+  #    mode: '0644'
+  #  when: ansible_hostname in var_group['percona_node_01_short_name']
+
+## Add Configuration Scripts
+  #- name: Add J2 template for Vault token rotation script
+  #  template:
+  #    src: templates/vault-token-rotation.sh.j2
+  #    dest: "/opt/vault/vault_token_rotation.sh"
+  #    mode: a+x
+  #  when: ansible_hostname in var_group['percona_node_01_short_name']
+
+## Create Cron JOB      
+  #- name: Run CRON get token renewal for approle
+  #  become: true        
+  #  cron:
+  #    name: "approle_hashicorp_token_renewal"
+  #    user: "root"
+  #    weekday: "*"
+  #    minute: "5"
+  #    hour: "*"
+  #    job: "/opt/vault/vault_token_rotation.sh"
+  #    state: present
+  #  when: ansible_hostname in var_group['percona_node_01_short_name']
+
+## Service Refresh Reload          
+  - name: System Daemon Reload
+    shell: systemctl daemon-reload
+    when: ansible_hostname in var_group['percona_node_01_short_name']
+
+  #- name:  Ensure token-rotation service is enabled
+  #  shell: systemctl enable token-rotation
+  #  async: 1000
+  #  poll: 5
+  #  when: ansible_hostname in var_group['percona_node_01_short_name']
+
+  #- name:  Ensure token rotation is started
+  #  shell: systemctl start token-rotation
+  #  async: 1000
+  #  poll: 5
+  #  when: ansible_hostname in var_group['percona_node_01_short_name']
+
+  #- name:  Ensure vault-agent service is enabled
+  #  shell: systemctl enable vault-agent
+  #  async: 1000
+  #  poll: 5
+  #  when: ansible_hostname in var_group['percona_node_01_short_name']
+
+  #- name:  Ensure vault-agent service is started and approle_token is generated.
+  #  shell: systemctl start vault-agent
+  #  async: 1000
+  #  poll: 5
+  #  when: ansible_hostname in var_group['percona_node_01_short_name']
+
+  #- name: Get token
+  #  shell: "cat {{ source_file }}"
+  #  register: token
+  #  when: ansible_hostname in var_group['percona_node_01_short_name']
+
+  #- name: Add Token Value on Keyring Conf File
+  #  lineinfile:
+  #    path: "{{ destination_file }}"
+  #    regexp: "{{ search_text }}"
+  #    line: "{{ search_text }} {{ token.stdout }}"
+  #    backup: yes
+  #    insertafter: yes
+  #  when: ansible_hostname in var_group['percona_node_01_short_name']
+      
+  #- name: restore context keyring_vault.conf file
+  #  shell: restorecon -v /var/lib/mysql-keyring/keyring_vault.conf
+  #  when: ansible_hostname in var_group['percona_node_01_short_name']
+  
+  ## Start Bootstrap Service
+  - name: Bootstrap | ensure bootstrap service is started
+    shell: systemctl start mysql@bootstrap.service
+    ignore_errors: true
+    async: 300
+    poll: 5
+    register: result
+    until: result is not failed
+    retries: 3
+    delay: 10
+    when: ansible_hostname in var_group['percona_node_01_short_name']
+
+## Set Percona Root Password
+  - name: root | get temp root password
+    shell: grep 'temporary password' /var/log/mysqld.log | awk '{print $NF}' | tail -n 1
+    register: temp_password
+  - debug:
+      msg: "{{ temp_password.stdout }}"
+    when: ansible_hostname in var_group['percona_node_01_short_name']
+
+  - name: root | set root password
+    shell: "echo \"ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ secret.percona_root_password }}'; FLUSH PRIVILEGES;\" | mysql -u root --password='{{ temp_password.stdout }}' --connect-expired-password"
+    when: ansible_hostname in var_group['percona_node_01_short_name']
+
+## Create MaxScale User for Load balancing  
+  - name: Set mysql maxscaleusr privileges grant all
+    community.mysql.mysql_user:
+      login_user: root
+      login_password: '{{ secret.percona_root_password }}'
+      login_unix_socket: /var/lib/mysql/mysql.sock
+      name: maxscaleusr
+      host: '%'
+      password: '{{ secret.percona_maxscaleusr_password }}'
+      priv: '*.*:ALL,GRANT'
+      state: present
+    vars:
+      ansible_python_interpreter: /usr/bin/python3
+    when: ansible_hostname in var_group['percona_node_01_short_name']

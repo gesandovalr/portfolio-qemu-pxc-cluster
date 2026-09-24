@@ -1,0 +1,27 @@
+exit_after_auth = false
+pid_file = "./pidfile"
+
+vault {
+  address = "https://{{var_group.vault_url_ip_address}}:8200"
+  tls_skip_verify = true
+  retry {
+    num_retries = 5
+  }
+}
+
+auto_auth {
+   method "approle" {
+       mount_path = "auth/approle_percona"
+       config = {
+           role_id_file_path = "/opt/vault/.role_id"
+           secret_id_file_path = "/opt/vault/.secret_id"
+           remove_secret_id_file_after_reading = false
+       }
+   }
+
+   sink "file" {
+       config = {
+           path = "/opt/vault/approle_token"
+       }
+   }
+}
