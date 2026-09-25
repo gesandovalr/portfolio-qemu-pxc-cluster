@@ -26,29 +26,8 @@
       - group_vars/deploy_info.yaml
       - secrets/secrets.yml
     
-    #vars:
-    #  source_file: /opt/vault/approle_token
-    #  destination_file: /var/lib/mysql-keyring/keyring_vault.conf
-    #  search_text: "token ="  
-    
     roles:
       - percona_bootstraper
-
-############# Keyring Install for Servers #############    
-  
-  #- hosts: all
-    #become: true
-    #vars_files:
-      #- group_vars/deploy_info.yaml
-      #- secrets/secrets.yml
-
-    #vars:
-      #source_file: /opt/vault/approle_token
-      #destination_file: /var/lib/mysql-keyring/keyring_vault.conf
-      #search_text: "token ="
-
-    #roles:
-    #  - keyring_install
 
 ############# Fetch certificate Files and copy them to buffer #############
 
@@ -69,14 +48,6 @@
 
     roles:
       - database_init_start
-
-############# SSH-Permissions #############
-
-  - hosts: all
-    become: true
-
-    roles:
-      - ssh_permissions   
 
 ############# Clear Facts Data #############
 

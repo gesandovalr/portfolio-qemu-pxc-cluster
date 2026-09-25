@@ -1,4 +1,4 @@
-resource "libvirt_domain" "example" {
+resource "libvirt_domain" "virtual_machines" {
   for_each = var.VMS
 
   name        = each.value.name

@@ -13,3 +13,17 @@
     async: 300
     poll: 5
     when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+
+  - name: MYSQL | ensure node 01 finish bootstrapping and is ready to accept connections
+    become: true
+    shell: systemctl stop mysql@bootstrap.service
+    async: 300
+    poll: 5
+    when: ansible_hostname in [var_group.percona_node_01_short_name]
+
+  - name: MYSQL | ensure mysql service is started
+    become: true
+    shell: systemctl start mysql
+    async: 300
+    poll: 5
+    when: ansible_hostname in [var_group.percona_node_01_short_name]

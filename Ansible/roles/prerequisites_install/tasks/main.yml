@@ -29,6 +29,12 @@
     ansible.builtin.dnf:
       name: firewalld
       state: present
+  
+  - name: Enable and start firewalld
+    ansible.builtin.systemd:
+      name: firewalld
+      enabled: true
+      state: started
  
   - name: install python3-pip
     ansible.builtin.dnf:
@@ -39,6 +45,3 @@
     ansible.builtin.pip:
       name: pymysql
       state: latest
-
-  #- name: Reboot Machines after updates
-  #  reboot:

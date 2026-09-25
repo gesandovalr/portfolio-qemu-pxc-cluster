@@ -22,17 +22,21 @@
       name: 'https://repo.percona.com/yum/percona-release-latest.noarch.rpm'
       state: present
     
-  - name: Setup percona Release 8.0
-    shell: percona-release setup pxc-80 -y
+  - name: Setup percona Release 8.4 LTS
+    shell: percona-release setup pxc-84-lts
     ignore_errors: true
     
   - name: Install percona-xtradb-cluster
     ignore_errors: true
     shell: dnf install percona-xtradb-cluster -y
 
-  - name: Install percona-xtrabackup 80
+  - name: enable pxb-84-lts repo for xtrabackup-84
     ignore_errors: true
-    shell: dnf install percona-xtrabackup-80 -y
+    shell: percona-release enable pxb-84-lts
+
+  - name: Install percona-xtrabackup 84
+    ignore_errors: true
+    shell: dnf install percona-xtrabackup-84 -y
 
   - name: Enable firewall rules for percona-xtradb
     ansible.posix.firewalld:
@@ -69,16 +73,6 @@
       immediate: true
       state: enabled
 
-  #- name: Copy certificate CA from Hashicorp
-  #  ansible.builtin.copy:
-  #    src: files/tls.crt
-  #    dest: /var/lib/mysql-keyring/
-  #    owner: mysql
-  #    group: mysql
-  #    mode: '0644'
-
-  #- name: restore context tls.crt file
-  #  shell: restorecon -v /var/lib/mysql-keyring/tls.crt
 
   - name: initialize database on node 02/03
     shell: /usr/sbin/mysqld --initialize --user=mysql

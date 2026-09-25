@@ -1,839 +1,800 @@
-# OpenTofu QEMU/KVM Infrastructure Automation Lab
+# OpenTofu + Ansible Percona XtraDB Cluster Lab
 
-A local Infrastructure as Code lab built with **OpenTofu**, **libvirt**, **QEMU/KVM**, **virt-manager**, and **Ansible**.
+A local Infrastructure as Code and configuration-management project that provisions a three-node AlmaLinux virtual environment on QEMU/KVM with OpenTofu and libvirt, then configures a Percona XtraDB Cluster (PXC) with Ansible.
 
-The goal of this project is to demonstrate how virtual infrastructure can be provisioned, configured, validated, destroyed, and recreated consistently using Infrastructure as Code and configuration management practices.
+The project demonstrates a complete local automation workflow: VM provisioning, cloud-init bootstrap, static networking, SSH key authentication, Percona installation, Galera/PXC bootstrap, certificate distribution, database initialization, SSH hardening, and optional HashiCorp Vault/keyring integration.
 
-The infrastructure runs locally on a Linux workstation using QEMU/KVM, while the complete source code and project history are maintained in GitHub.
+## Project Goals
 
----
+This repository is designed as a portfolio lab for demonstrating practical experience with:
 
-## Project Objectives
+- OpenTofu Infrastructure as Code
+- QEMU/KVM and libvirt virtualization
+- QCOW2 golden-image based provisioning
+- AlmaLinux cloud images and cloud-init
+- Static Linux networking
+- SSH public-key authentication
+- Ansible inventories, variables, roles, templates, and Vault
+- Percona XtraDB Cluster 8.0
+- Galera cluster bootstrap and node joining
+- MySQL/PXC firewall requirements
+- TLS certificate distribution between database nodes
+- SELinux-aware automation
+- SSH hardening and delegated administrative access
+- HashiCorp Vault integration patterns for database key management
+- Git-based infrastructure lifecycle management
 
-This project demonstrates practical experience with:
+## Architecture
 
-* Infrastructure as Code using OpenTofu
-* Linux virtualization with QEMU/KVM
-* libvirt resource management
-* Virtual machine provisioning
-* Virtual networking and storage
-* Cloud-init
-* Configuration management with Ansible
-* Linux system administration
-* Infrastructure lifecycle management
-* Git branching and release management
-* Reusable infrastructure components
-* Infrastructure documentation
-* Idempotent configuration
-* Local development and testing workflows
-
-The project is intentionally built incrementally so that its Git history also demonstrates how the infrastructure evolves from a basic virtual machine deployment into a reusable automation platform.
-
----
-
-# Architecture
-
-The infrastructure is executed directly from a physical Linux workstation.
+The current implementation provisions three virtual machines from the same AlmaLinux golden image and attaches them to an existing libvirt network named `LAN` by default.
 
 ```text
-                         GitHub
-                            │
-                            │ Source Code
-                            │
-                            ▼
-                ┌──────────────────────┐
-                │  Linux Workstation   │
-                │                      │
-                │  Git                 │
-                │  OpenTofu            │
-                │  Ansible             │
-                │  virt-manager        │
-                └──────────┬───────────┘
-                           │
-                           │ libvirt API
-                           ▼
-                ┌──────────────────────┐
-                │      libvirt         │
-                └──────────┬───────────┘
-                           │
-                           ▼
-                ┌──────────────────────┐
-                │      QEMU/KVM        │
-                └──────────┬───────────┘
-                           │
-              ┌────────────┼────────────┐
-              │            │            │
-              ▼            ▼            ▼
-           web01          db01       monitor01
+                                  Git Repository
+                                       |
+                     +-----------------+-----------------+
+                     |                                   |
+                     v                                   v
+               OpenTofu / libvirt                    Ansible
+                     |                                   |
+                     | provision                         | configure
+                     v                                   v
+              QEMU/KVM Hypervisor                PXC configuration
+                     |
+                  Existing
+               libvirt network
+                    LAN
+                     |
+        +------------+------------+
+        |            |            |
+        v            v            v
++---------------+ +---------------+ +---------------+
+| PERCDBTEST01  | | PERCDBTEST02  | | PERCDBTEST03  |
+| 10.20.10.10   | | 10.20.10.11   | | 10.20.10.12   |
+| 2 vCPU        | | 2 vCPU        | | 2 vCPU        |
+| 2 GiB RAM     | | 2 GiB RAM     | | 2 GiB RAM     |
++-------+-------+ +-------+-------+ +-------+-------+
+        |                 |                 |
+        +-----------------+-----------------+
+                          |
+                          v
+              Percona XtraDB Cluster 8.0
 ```
 
-OpenTofu is responsible for provisioning the infrastructure.
-
-Ansible is responsible for configuring the operating systems and applications after the virtual machines have been created.
-
----
-
-# Technology Stack
-
-| Technology   | Purpose                                               |
-| ------------ | ----------------------------------------------------- |
-| OpenTofu     | Infrastructure as Code                                |
-| libvirt      | Virtualization API and resource management            |
-| QEMU/KVM     | Hypervisor                                            |
-| virt-manager | Graphical VM management and validation                |
-| Linux        | Physical virtualization host                          |
-| Cloud-init   | Initial guest operating system configuration          |
-| Ansible      | Configuration management                              |
-| Git          | Source control                                        |
-| GitHub       | Repository, documentation, pull requests and releases |
-
----
-
-# Infrastructure Lifecycle
-
-The project follows a complete infrastructure lifecycle.
+## Provisioning Flow
 
 ```text
-Write Infrastructure Code
-          │
-          ▼
-    tofu validate
-          │
-          ▼
-      tofu plan
-          │
-          ▼
-      tofu apply
-          │
-          ▼
-    QEMU/KVM VM
-          │
-          ▼
-      Cloud-init
-          │
-          ▼
-       Ansible
-          │
-          ▼
-     Validation
-          │
-          ▼
-      Application
-          │
-          ▼
-     tofu destroy
-```
-
-The goal is for the complete environment to be reproducible.
-
-The environment should be capable of being destroyed and recreated using the source code stored in this repository.
-
----
-
-# OpenTofu Responsibilities
-
-OpenTofu manages infrastructure resources such as:
-
-* libvirt networks
-* virtual machine storage
-* base images
-* virtual disks
-* CPU allocation
-* memory allocation
-* network interfaces
-* virtual machines
-* cloud-init configuration
-* infrastructure outputs
-
-OpenTofu is not used as a replacement for configuration management.
-
-Application installation and operating system configuration are handled by Ansible.
-
----
-
-# Ansible Responsibilities
-
-Ansible is used after infrastructure provisioning to configure the guest operating systems.
-
-Examples include:
-
-* package installation
-* user management
-* SSH configuration
-* firewall configuration
-* web server installation
-* application deployment
-* security hardening
-* monitoring agents
-* service configuration
-* health checks
-
-This separation keeps infrastructure provisioning and operating system configuration independent.
-
-```text
-OpenTofu
-   │
-   ├── VM
-   ├── CPU
-   ├── Memory
-   ├── Storage
-   ├── Network
-   └── Cloud-init
-          │
-          ▼
-       Ansible
-          │
-          ├── Packages
-          ├── Users
-          ├── SSH
-          ├── Firewall
-          ├── Applications
-          └── Monitoring
-```
-
----
-
-# Repository Structure
-
-```text
-portfolio-qemu-tofu-lab/
-│
-├── README.md
-├── .gitignore
-│
-├── docs/
-│   ├── architecture.md
-│   └── screenshots/
-│
-├── tofu/
-│   ├── versions.tf
-│   ├── providers.tf
-│   ├── variables.tf
-│   ├── locals.tf
-│   ├── network.tf
-│   ├── storage.tf
-│   ├── vm.tf
-│   ├── outputs.tf
-│   ├── terraform.tfvars.example
-│   │
-│   └── templates/
-│       └── cloud-init.yaml
-│
-├── ansible/
-│   ├── ansible.cfg
-│   │
-│   ├── inventory/
-│   │
-│   ├── playbooks/
-│   │   └── site.yml
-│   │
-│   └── roles/
-│
-└── scripts/
-    ├── deploy.sh
-    ├── validate.sh
-    └── destroy.sh
-```
-
-The structure will evolve as the project becomes more modular.
-
----
-
-# Development Strategy
-
-The repository uses a simple development workflow based on three branch types.
-
-```text
-main
-  ▲
-  │
-dev
-  ▲
-  │
-feature/*
-```
-
-## `main`
-
-The `main` branch represents stable and release-ready versions of the infrastructure.
-
-Only tested changes should be merged into `main`.
-
----
-
-## `dev`
-
-The `dev` branch acts as the integration branch.
-
-New features are merged into `dev` and tested together before being promoted to `main`.
-
----
-
-## `feature/*`
-
-Individual features are developed in short-lived feature branches.
-
-Examples:
-
-```text
-feature/libvirt-base
-feature/libvirt-network
-feature/storage-pool
-feature/linux-vm
-feature/cloud-init
-feature/ansible
-feature/windows-vm
-feature/monitoring
-```
-
-The normal workflow is:
-
-```text
-feature/*
-    │
-    ▼
-   dev
-    │
-    ▼
-  main
-    │
-    ▼
-Release
-```
-
----
-
-# Commit Strategy
-
-The project follows a simple Conventional Commit style.
-
-Examples:
-
-```text
-feat: configure libvirt provider
-feat: add virtual network
-feat: add Linux VM provisioning
-feat: add cloud-init configuration
-
-fix: correct storage pool path
-fix: update network configuration
-
-docs: add architecture documentation
-docs: update installation instructions
-
-refactor: convert VM configuration into reusable module
-
-chore: update provider configuration
-```
-
-This makes the Git history easier to understand and demonstrates how each part of the project was introduced.
-
----
-
-# Release Strategy
-
-Stable versions are tagged using Semantic Versioning.
-
-```text
-MAJOR.MINOR.PATCH
-```
-
-Example releases:
-
-```text
-v1.0.0 - Initial QEMU/KVM OpenTofu deployment
-v1.1.0 - Cloud-init support
-v1.2.0 - Ansible configuration management
-v1.3.0 - Multi-VM deployment
-v1.4.0 - Windows VM support
-v1.5.0 - Monitoring infrastructure
-```
-
-Tags represent stable versions of the project.
-
-Feature development is performed in branches, not tags.
-
----
-
-# Project Roadmap
-
-## Phase 1 — OpenTofu and libvirt
-
-Initial OpenTofu project configuration.
-
-Goals:
-
-* Configure OpenTofu
-* Configure the libvirt provider
-* Validate communication with QEMU/KVM
-* Create the base project structure
-
----
-
-## Phase 2 — Virtual Networking
-
-Create the networking layer.
-
-Goals:
-
-* Create a libvirt virtual network
-* Configure DHCP
-* Configure IP addressing
-* Validate VM connectivity
-
----
-
-## Phase 3 — Storage
-
-Configure virtual machine storage.
-
-Goals:
-
-* Create or use a libvirt storage pool
-* Import a Linux base image
-* Create virtual disks
-* Manage qcow2 volumes
-
----
-
-## Phase 4 — Linux Virtual Machine
-
-Provision the first complete Linux VM.
-
-Goals:
-
-* Configure CPU
-* Configure memory
-* Attach storage
-* Attach network interfaces
-* Configure console access
-* Validate the VM using virt-manager
-
----
-
-## Phase 5 — Cloud-init
-
-Automate the initial guest configuration.
-
-Goals:
-
-* Configure hostname
-* Create initial user
-* Configure SSH keys
-* Configure basic networking
-* Prepare the VM for Ansible
-
----
-
-## Phase 6 — Ansible
-
-Introduce configuration management.
-
-Goals:
-
-* Create Ansible inventory
-* Validate SSH connectivity
-* Install packages
-* Configure services
-* Implement reusable roles
-* Verify Ansible idempotency
-
----
-
-## Phase 7 — Multi-VM Environment
-
-Expand the environment beyond a single VM.
-
-Potential infrastructure:
-
-```text
-web01
-db01
-monitor01
-```
-
-This phase will demonstrate reusable infrastructure definitions and dependencies between services.
-
----
-
-## Phase 8 — Windows Automation
-
-Add Windows virtualization.
-
-Potential goals:
-
-* Create a generalized Windows QEMU image
-* Use VirtIO drivers
-* Use Sysprep for image preparation
-* Provision Windows VMs from OpenTofu
-* Automate post-deployment configuration
-
----
-
-## Phase 9 — Monitoring
-
-Introduce infrastructure monitoring.
-
-Potential tools may include:
-
-* Prometheus
-* Grafana
-* Node Exporter
-* Linux system metrics
-
----
-
-# Prerequisites
-
-The following components are expected on the Linux workstation:
-
-```text
-OpenTofu
-QEMU
-KVM
-libvirt
-virt-manager
-Git
+AlmaLinux Golden QCOW2
+          |
+          v
+OpenTofu libvirt_volume
+          |
+          +--> PERCDBTEST01-disk.qcow2
+          +--> PERCDBTEST02-disk.qcow2
+          +--> PERCDBTEST03-disk.qcow2
+          |
+          v
+Cloud-init ISO per VM
+          |
+          +--> hostname / FQDN
+          +--> static IPv4
+          +--> default gateway
+          +--> DNS servers
+          +--> DNS search domain
+          +--> almalinux user
+          +--> SSH public key
+          +--> password SSH disabled
+          |
+          v
+libvirt_domain
+          |
+          v
+Running AlmaLinux VMs
+          |
+          v
 Ansible
-SSH client
+          |
+          +--> prerequisites
+          +--> Percona installation
+          +--> bootstrap node 01
+          +--> distribute certificates
+          +--> start nodes 02 and 03
+          +--> SSH hardening
 ```
 
-Virtualization support must also be enabled in the system BIOS/UEFI.
+## Infrastructure Topology
 
-The current user must have permission to interact with libvirt.
+The current OpenTofu variable set defines the following nodes:
 
----
+| Node | IPv4 address | Prefix | vCPU | Memory |
+| --- | --- | ---: | ---: | ---: |
+| `PERCDBTEST01` | `10.20.10.10` | `/24` | 2 | 2048 MiB |
+| `PERCDBTEST02` | `10.20.10.11` | `/24` | 2 | 2048 MiB |
+| `PERCDBTEST03` | `10.20.10.12` | `/24` | 2 | 2048 MiB |
 
-# Local Deployment Workflow
+The current environment values also define:
 
-Clone the repository:
+- Gateway: `10.20.10.1`
+- Guest DNS: `8.8.8.8`, `8.8.4.4`
+- Cloud-init search domain: `lab.local`
+- Existing libvirt network: `LAN`
+- Default libvirt storage pool: `Virtual_Machines`
+- Golden image: `al9-golden-build.qcow2`
 
-```bash
-git clone <repository-url>
-cd portfolio-qemu-tofu-lab
+The infrastructure code does not create the `LAN` network. It expects that network to exist in libvirt before deployment.
+
+## Technology Stack
+
+| Technology | Role in the project |
+| --- | --- |
+| OpenTofu | Infrastructure provisioning and lifecycle management |
+| dmacvicar/libvirt provider | Interface between OpenTofu and libvirt |
+| QEMU/KVM | Local virtualization platform |
+| libvirt | VM, storage, disk, network-interface, and domain management |
+| QCOW2 | Golden image and VM disk format |
+| AlmaLinux 9 | Guest operating system |
+| cloud-init | First-boot guest identity, networking, and SSH configuration |
+| Ansible | OS and application configuration |
+| Percona XtraDB Cluster 8.0 | Synchronous multi-node MySQL-compatible cluster |
+| Galera/wsrep | Replication and cluster membership layer used by PXC |
+| firewalld | Host firewall configuration |
+| SELinux | Mandatory access control retained by the guest configuration |
+| Ansible Vault | Encrypted secrets storage |
+| HashiCorp Vault | Optional keyring/token integration present in the project |
+
+## Repository Structure
+
+```text
+portfolio-qemu-pxc-cluster/
+├── readme.md
+├── Ansible/
+│   ├── ansible.cfg
+│   ├── inventory.yml
+│   ├── main.yml
+│   ├── group_vars/
+│   │   ├── all.yaml
+│   │   └── deploy_info.yaml
+│   ├── host_vars/
+│   ├── secrets/
+│   │   └── secrets.yml
+│   ├── templates/
+│   │   ├── encryption-percona-node-01.cnf.j2
+│   │   ├── encryption-percona-node-02.cnf.j2
+│   │   ├── encryption-percona-node-03.cnf.j2
+│   │   ├── node-01-keyring-vault.conf.j2
+│   │   ├── node-02-keyring-vault.conf.j2
+│   │   ├── node-03-keyring-vault.conf.j2
+│   │   └── vault-token-rotation.sh.j2
+│   └── roles/
+│       ├── prerequisites_install/
+│       ├── percona_install/
+│       ├── percona_bootstraper/
+│       ├── certificates_copy/
+│       ├── database_init_start/
+│       ├── ssh_permissions/
+│       ├── vault_agent/
+│       └── keyring_install/
+└── Tofu/
+    ├── .terraform.lock.hcl
+    ├── providers.tf
+    ├── vars.tf
+    ├── storage.tf
+    ├── cloud-init.tf
+    ├── vm.tf
+    └── terraform.tfvars
 ```
 
-Move into the OpenTofu directory:
+## OpenTofu Design
 
-```bash
-cd tofu
+### Provider
+
+The project uses the `dmacvicar/libvirt` provider.
+
+```hcl
+terraform {
+  required_providers {
+    libvirt = {
+      source = "dmacvicar/libvirt"
+    }
+  }
+}
 ```
 
-Initialize the project:
+The connection URI is not hardcoded in the current provider configuration, so the active libvirt connection is determined by the environment/provider defaults used when OpenTofu runs.
+
+### VM Definition
+
+VMs are generated dynamically from the `VMS` map:
+
+```hcl
+variable "VMS" {
+  type = map(object({
+    name         = string
+    memory       = number
+    vcpu         = number
+    ipv4_add_nic = string
+    netmask      = number
+  }))
+}
+```
+
+This lets the same OpenTofu resources create all cluster nodes through `for_each`.
+
+### Golden Image and VM Storage
+
+Each VM gets an individual QCOW2 volume populated from the AlmaLinux golden image.
+
+Current source image:
+
+```text
+/home/gesora/Templates/al9-golden-build.qcow2
+```
+
+The generated disk naming convention is:
+
+```text
+PERCDBTEST01-disk.qcow2
+PERCDBTEST02-disk.qcow2
+PERCDBTEST03-disk.qcow2
+```
+
+The disks are stored in the configured libvirt pool and use `virtio` as the guest disk bus.
+
+### VM Hardware
+
+Each `libvirt_domain` currently uses:
+
+- KVM virtualization
+- x86_64 architecture
+- Q35 machine type
+- host-passthrough CPU mode
+- ACPI
+- VirtIO disk and network devices
+- SATA cloud-init CD-ROM
+- VNC bound to `127.0.0.1`
+- VirtIO video
+
+The domain is started automatically after creation, while libvirt autostart is disabled.
+
+## Cloud-init Configuration
+
+A separate cloud-init disk is generated for every VM.
+
+Cloud-init configures:
+
+- hostname
+- FQDN
+- `/etc/hosts` management
+- `almalinux` administrative account
+- passwordless sudo for the `wheel` user
+- SSH public-key authentication
+- disabled SSH password authentication
+- disabled root login configuration through cloud-init
+- static IPv4 addressing
+- default route
+- DNS servers
+- DNS search domain
+
+### SSH Authentication
+
+The VM account is configured for key-based authentication only:
+
+```text
+User: almalinux
+Password SSH: disabled
+SSH key: supplied through vm_ssh_public_key
+```
+
+The account password is locked and `ssh_pwauth` is disabled.
+
+### Guest Networking
+
+Each guest receives its address from the `VMS` variable map. The cloud-init network configuration uses `eth0` with DHCP disabled.
+
+Example:
+
+```text
+PERCDBTEST01
+IP:      10.20.10.10/24
+Gateway: 10.20.10.1
+DNS:     8.8.8.8, 8.8.4.4
+Domain:  lab.local
+```
+
+The resulting FQDN is generated from the node name plus `vm_domain_name`.
+
+Example:
+
+```text
+PERCDBTEST01.lab.local
+```
+
+## Ansible Design
+
+The Ansible inventory defines the same three cluster nodes provisioned by OpenTofu:
+
+```text
+PERCDBTEST01 -> 10.20.10.10
+PERCDBTEST02 -> 10.20.10.11
+PERCDBTEST03 -> 10.20.10.12
+```
+
+Ansible connects as:
+
+```text
+ansible_user: almalinux
+SSH key: ~/.ssh/id_ed25519
+```
+
+The project-local `ansible.cfg` disables host-key checking, which is useful for this disposable lab because VM SSH host keys can change when the nodes are recreated.
+
+## Ansible Deployment Sequence
+
+`Ansible/main.yml` currently executes the configuration in this order:
+
+```text
+1. prerequisites_install
+          |
+          v
+2. percona_install
+          |
+          v
+3. percona_bootstraper
+          |
+          v
+4. certificates_copy
+          |
+          v
+5. database_init_start
+          |
+          v
+6. ssh_permissions
+          |
+          v
+7. clear gathered facts
+```
+
+Two additional roles are present in the repository but are currently disabled/commented in the main playbook:
+
+- `vault_agent`
+- `keyring_install`
+
+These represent the project’s HashiCorp Vault/keyring integration path and can be enabled when that part of the lab is required.
+
+## Ansible Roles
+
+### `prerequisites_install`
+
+Prepares AlmaLinux for the database deployment by:
+
+- importing the EPEL signing key
+- installing the EPEL repository
+- installing `jq`
+- installing `yum-utils`
+- installing `firewalld`
+- installing `python3-pip`
+- installing the Python `pymysql` module
+
+### `percona_install`
+
+Installs and prepares Percona XtraDB Cluster 8.0 by:
+
+- resetting/disabling the default RHEL MySQL module
+- importing the Percona packaging key
+- installing the Percona repository
+- enabling the `pxc-80` repository
+- installing `percona-xtradb-cluster`
+- installing `percona-xtrabackup-80`
+- opening PXC firewall ports
+- initializing MySQL data on nodes 02 and 03
+- ensuring the MySQL service is stopped before cluster bootstrap
+
+### PXC Firewall Ports
+
+The role configures the following ports through `firewalld`:
+
+| Port | Protocol | Purpose |
+| --- | --- | --- |
+| 3306 | TCP | MySQL client connections |
+| 4444 | TCP | State Snapshot Transfer (SST) |
+| 4567 | TCP/UDP | Galera replication traffic |
+| 4568 | TCP | Incremental State Transfer (IST) |
+
+### `percona_bootstraper`
+
+Configures and bootstraps the cluster.
+
+The role:
+
+- installs node-specific `/etc/my.cnf` templates
+- enables the SELinux `mysql_connect_any` boolean on node 01
+- reloads systemd on the first node
+- starts `mysql@bootstrap.service` on node 01
+- retrieves the temporary MySQL root password
+- sets the configured Percona root password
+- creates a `maxscaleusr` account for load-balancer integration
+
+Cluster-specific values are stored in `group_vars/deploy_info.yaml`, including node addresses, hostnames, short names, and the wsrep cluster name.
+
+### `certificates_copy`
+
+After the bootstrap node has generated the MySQL TLS material, this role:
+
+1. fetches certificates and keys from node 01 to the Ansible controller buffer
+2. copies them to nodes 02 and 03
+3. applies MySQL ownership and file permissions
+4. restores SELinux file contexts
+
+The distributed material includes:
+
+- `ca-key.pem`
+- `ca.pem`
+- `client-cert.pem`
+- `client-key.pem`
+- `private_key.pem`
+- `public_key.pem`
+- `server-cert.pem`
+- `server-key.pem`
+
+### `database_init_start`
+
+Starts the remaining database nodes after bootstrap preparation by:
+
+- creating the MySQL PID file on nodes 02 and 03
+- starting the MySQL service on nodes 02 and 03
+
+This allows the remaining nodes to join the bootstrapped PXC cluster.
+
+### `ssh_permissions`
+
+Implements the project’s additional SSH administration configuration by:
+
+- creating `/home/fpnusr/.ssh`
+- maintaining an `authorized_keys` file
+- distributing multiple approved public keys
+- deploying a templated `sshd_config`
+- applying secure ownership and permissions
+- restoring SELinux context on `sshd_config`
+- granting the `fpnusr` account delegated sudo permissions
+- restarting `sshd`
+
+### `vault_agent`
+
+The repository includes a role for HashiCorp Vault Agent integration. The role is currently not enabled in `main.yml`.
+
+Its implementation includes:
+
+- HashiCorp RPM repository configuration
+- Vault package installation
+- `/opt/vault` directory creation
+- Vault Agent configuration deployment
+- AppRole role ID and secret ID templates
+- custom systemd units
+- token-rotation service support
+
+### `keyring_install`
+
+The repository also includes a keyring integration role, currently disabled in the main playbook.
+
+It contains automation for:
+
+- node-specific encryption configuration
+- `keyring_vault.conf`
+- Vault token retrieval
+- keyring token injection
+- token-rotation scheduling
+- Vault Agent startup
+- SELinux context restoration
+
+This demonstrates an intended database-at-rest encryption integration path using HashiCorp Vault.
+
+## Secrets Management
+
+`Ansible/secrets/secrets.yml` is stored in Ansible Vault format (`AES256`) and is referenced by the playbook for database credentials.
+
+To edit it:
 
 ```bash
+ansible-vault edit secrets/secrets.yml
+```
+
+To view it when authorized:
+
+```bash
+ansible-vault view secrets/secrets.yml
+```
+
+To run the playbook interactively with a Vault password:
+
+```bash
+ansible-playbook main.yml --ask-vault-pass
+```
+
+A Vault password file may also be used locally, but it must never be committed to Git.
+
+## Required Ansible Collections
+
+The current roles use modules from these collections:
+
+```text
+ansible.posix
+community.mysql
+community.general
+```
+
+They can be installed with:
+
+```bash
+ansible-galaxy collection install ansible.posix community.mysql community.general
+```
+
+## Prerequisites
+
+The virtualization host should provide:
+
+- Linux with KVM support
+- QEMU
+- libvirt
+- an existing libvirt storage pool
+- an existing libvirt network matching `vm_network_name`
+- OpenTofu
+- Ansible
+- Python 3
+- SSH client
+- an SSH key pair
+- a prepared AlmaLinux 9 golden QCOW2 image
+
+Verify virtualization support:
+
+```bash
+lsmod | grep kvm
+```
+
+Verify libvirt networks:
+
+```bash
+virsh net-list --all
+```
+
+Verify storage pools:
+
+```bash
+virsh pool-list --all
+```
+
+## Deployment
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/gesandovalr/portfolio-qemu-pxc-cluster.git
+cd portfolio-qemu-pxc-cluster
+```
+
+### 2. Prepare OpenTofu variables
+
+The project expects environment-specific values through `terraform.tfvars`, including:
+
+- storage pool name/path
+- golden image path
+- SSH public key
+- existing libvirt network name
+- domain name
+- gateway
+- VM definitions
+
+Do not commit real `.tfvars` files containing environment-specific or sensitive data.
+
+### 3. Initialize OpenTofu
+
+```bash
+cd Tofu
 tofu init
 ```
 
-Format the configuration:
+### 4. Validate
 
 ```bash
-tofu fmt -recursive
-```
-
-Validate the configuration:
-
-```bash
+tofu fmt -check
 tofu validate
 ```
 
-Review the infrastructure plan:
+### 5. Review the plan
 
 ```bash
 tofu plan
 ```
 
-Provision the infrastructure:
+### 6. Provision the VMs
 
 ```bash
 tofu apply
 ```
 
-After the virtual machines are created, they can be inspected through:
+OpenTofu creates the VM disks, per-node cloud-init ISO volumes, and libvirt domains.
+
+### 7. Validate SSH
+
+After cloud-init finishes:
 
 ```bash
-virt-manager
+ssh almalinux@10.20.10.10
+ssh almalinux@10.20.10.11
+ssh almalinux@10.20.10.12
 ```
 
----
-
-# Ansible Deployment
-
-After OpenTofu creates the infrastructure:
+### 8. Validate Ansible connectivity
 
 ```bash
-cd ../ansible
-```
-
-Validate connectivity:
-
-```bash
+cd ../Ansible
 ansible all -m ping
 ```
 
-Run the configuration:
-
-```bash
-ansible-playbook -i inventory/hosts.ini playbooks/site.yml
-```
-
-The Ansible configuration should be idempotent.
-
-A second execution should ideally produce no unexpected changes.
-
-Example:
+Expected result for all three nodes:
 
 ```text
-First execution:
-
-web01   ok=25   changed=12   failed=0
-
-Second execution:
-
-web01   ok=25   changed=0    failed=0
+SUCCESS => ping: pong
 ```
 
----
-
-# Destroying the Environment
-
-Because the environment is Infrastructure as Code, it should be possible to remove it completely and rebuild it.
-
-To destroy the OpenTofu-managed resources:
+### 9. Run the configuration playbook
 
 ```bash
-cd tofu
+ansible-playbook main.yml --ask-vault-pass
+```
+
+### 10. Validate the PXC cluster
+
+After deployment, connect to MySQL on the bootstrap node and inspect wsrep status:
+
+```sql
+SHOW STATUS LIKE 'wsrep_cluster_size';
+SHOW STATUS LIKE 'wsrep_cluster_status';
+SHOW STATUS LIKE 'wsrep_local_state_comment';
+```
+
+For a healthy three-node cluster, the expected cluster size is `3` and the cluster status should report `Primary`.
+
+## Infrastructure Lifecycle
+
+```text
+tofu init
+    |
+    v
+tofu validate
+    |
+    v
+tofu plan
+    |
+    v
+tofu apply
+    |
+    v
+cloud-init
+    |
+    v
+ansible all -m ping
+    |
+    v
+ansible-playbook main.yml
+    |
+    v
+PXC validation
+    |
+    v
 tofu destroy
 ```
 
-The ability to recreate the environment is part of the project's validation strategy.
-
----
-
-# Infrastructure Validation
-
-Before changes are committed, the OpenTofu configuration should be validated.
+To remove the provisioned VM infrastructure:
 
 ```bash
-tofu fmt -recursive
-tofu validate
-tofu plan
+cd Tofu
+tofu destroy
 ```
 
-Ansible configuration can also be checked before execution:
+## Security Model
 
-```bash
-ansible-playbook --syntax-check playbooks/site.yml
-```
+The current project contains several security-focused implementation choices:
 
-Additional validation tools may be introduced later, including:
+- SSH password authentication disabled during cloud-init
+- root access disabled through cloud-init configuration
+- SSH public-key authentication
+- Ansible Vault encrypted secret file
+- SELinux-aware file-context restoration
+- SELinux boolean configuration for MySQL network access where required
+- firewalld restrictions for PXC services
+- database TLS certificate propagation
+- dedicated administrative SSH configuration
+- optional Vault Agent and database keyring integration
+
+## Git and Sensitive Files
+
+The `Tofu/.gitignore` excludes:
 
 ```text
-TFLint
-Checkov
-ansible-lint
-yamllint
-```
-
----
-
-# State Management
-
-OpenTofu state files are local for the initial version of this lab.
-
-State files must not be committed to GitHub.
-
-Examples:
-
-```text
-terraform.tfstate
-terraform.tfstate.backup
 *.tfstate
 *.tfstate.*
-```
-
-Future versions of the project may explore remote state management.
-
----
-
-# Sensitive Information
-
-The repository must not contain:
-
-* passwords
-* private SSH keys
-* API credentials
-* authentication tokens
-* production secrets
-* private configuration files
-
-Environment-specific variables should use example files.
-
-Example:
-
-```text
-terraform.tfvars.example
-```
-
-The real file:
-
-```text
-terraform.tfvars
-```
-
-should not be committed.
-
----
-
-# Recommended `.gitignore`
-
-```gitignore
-# OpenTofu / Terraform
 .terraform/
-*.tfstate
-*.tfstate.*
 *.tfvars
-crash.log
-crash.*.log
-
-# SSH
-*.pem
-*.key
-
-# Ansible
-*.retry
-
-# OS / Editors
-.DS_Store
-.vscode/
-.idea/
+*.tfvars.json
 ```
 
-The OpenTofu dependency lock file should normally remain under version control:
+The `Ansible/.gitignore` excludes the `secrets/` directory.
 
-```text
-.terraform.lock.hcl
+Terraform/OpenTofu state files and real `.tfvars` files should not be published because state can contain infrastructure metadata and sensitive values.
+
+The project archive currently contains local state and environment-specific files, so before publishing a clean portfolio repository, verify Git history as well as the working tree.
+
+Recommended checks:
+
+```bash
+git ls-files | grep -E 'tfstate|terraform.tfvars|Ansible/secrets'
 ```
 
----
+If state was previously committed, removing it from `.gitignore` alone is not sufficient; it should also be removed from Git history and any exposed credentials should be rotated.
 
-# Design Principles
+## Current Implementation Notes
 
-This project follows several infrastructure automation principles.
+The documentation above describes what is present in the repository at the time of this scan. A few components are intentionally present but not active in the main deployment path:
 
-## Reproducibility
+- `vault_agent` is currently commented out in `Ansible/main.yml`.
+- `keyring_install` is currently commented out in `Ansible/main.yml`.
+- the OpenTofu configuration consumes an existing libvirt network instead of creating one.
+- the golden image source in `storage.tf` is currently a host-specific absolute path.
+- the current `ansible.cfg` uses a host-specific absolute inventory path.
 
-Infrastructure should be recreated from code rather than manually rebuilt.
+Those host-specific paths are suitable for the current workstation but should eventually be converted to relative paths or variables if the project is intended to be cloned and executed unchanged on another system.
 
-## Idempotency
+## Portfolio Skills Demonstrated
 
-Repeated configuration runs should result in the same system state.
-
-## Separation of Responsibilities
-
-OpenTofu provisions infrastructure.
-
-Ansible configures operating systems and applications.
-
-## Version Control
-
-Infrastructure changes are tracked through Git.
-
-## Small Changes
-
-Features are introduced incrementally through dedicated branches.
-
-## Documentation
-
-Architecture decisions and deployment procedures are documented alongside the source code.
-
----
-
-# Portfolio Purpose
-
-This repository is also intended as a technical portfolio project.
-
-It demonstrates practical knowledge across several infrastructure disciplines:
+This project demonstrates the integration of multiple infrastructure disciplines rather than a single automation tool:
 
 ```text
-Linux Administration
-       +
-Virtualization
-       +
 Infrastructure as Code
-       +
-Configuration Management
-       +
-Git
-       +
-Automation
-       =
-Reproducible Infrastructure
+        +
+Virtualization
+        +
+Linux provisioning
+        +
+Configuration management
+        +
+Database clustering
+        +
+Security hardening
+        +
+Secrets management
+        +
+Operational validation
 ```
 
-Rather than showing isolated examples of OpenTofu or Ansible, this project demonstrates how the tools can work together as part of a complete infrastructure lifecycle.
+The primary design principle is separation of responsibilities:
+
+- OpenTofu defines and creates infrastructure.
+- cloud-init performs first-boot guest configuration.
+- Ansible performs repeatable operating-system and database configuration.
+- Ansible Vault protects deployment secrets.
+- PXC provides the database cluster layer.
+
+## Future Improvements
+
+The current codebase already exposes several clear next steps for continued development:
+
+- add an OpenTofu remote backend for state
+- replace host-specific absolute paths with portable variables/relative paths
+- generate Ansible inventory from OpenTofu outputs
+- invoke Ansible automatically after VM provisioning
+- add formal Ansible collection requirements
+- make Vault Agent/keyring integration part of the supported deployment path
+- add explicit PXC health-check automation
+- add MaxScale deployment to complement the existing `maxscaleusr`
+- add automated tests for SSH, MySQL, wsrep, firewall, and service state
+- add CI validation for `tofu fmt`, `tofu validate`, YAML linting, and Ansible syntax checks
+- add architecture screenshots or rendered diagrams to the repository
+
+## Author
+
+**German Eduardo Sandoval**  
+Sysadmin Engineer  
+Mex Solutions IT
 
 ---
 
-# Future Improvements
-
-Potential future additions include:
-
-* reusable OpenTofu modules
-* multiple Linux distributions
-* Windows Server deployment
-* Windows client deployment
-* dynamic Ansible inventory
-* automated DNS
-* multiple networks
-* firewall segmentation
-* reverse proxy
-* load balancing
-* database servers
-* monitoring
-* centralized logging
-* security hardening
-* automated infrastructure testing
-* secrets management
-* remote OpenTofu state
-* additional virtualization environments
-
----
-
-# Status
-
-🚧 **Project under active development**
-
-Current focus:
-
-```text
-OpenTofu
-+
-libvirt
-+
-QEMU/KVM
-```
-
-The project will be expanded incrementally using feature branches and versioned releases.
-
----
-
-# Author
-
-**German Eduardo Sandoval**
-
-Sysadmin Engineer
-
-Infrastructure, Cloud and Automation
-
-GitHub: `gesandoval`
-
-Portfolio: `germansandoval.tech`
-
----
-
-## License
-
-This project is intended for educational, laboratory, demonstration, and portfolio purposes.
-
-A formal open-source license may be added as the project evolves.
+This repository is a hands-on infrastructure portfolio project built to demonstrate reproducible local virtualization, automated Linux provisioning, and clustered database deployment using OpenTofu and Ansible.

@@ -4,12 +4,10 @@ resource "libvirt_volume" "vm_disk" {
   name = "${each.key}-disk.qcow2"
   pool = var.vm_pool_name
 
-  #capacity      = 10
-  #capacity_unit = "GiB"
-
   target = {
     format = {
       type = "qcow2"
+  
     }
     permissions = {
       owner = "1000"
