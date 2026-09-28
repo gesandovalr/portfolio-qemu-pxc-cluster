@@ -1,85 +1,84 @@
 ---
-  - name: Disable mysql module RHEL
-    shell: dnf remove @mysql
-    ignore_errors: true
+- name: Disable mysql module RHEL
+  ansible.builtin.command: dnf remove @mysql
+  ignore_errors: true
 
-  - name: Disable mysql module RHEL
-    shell: dnf -y module reset mysql
-    ignore_errors: true
+- name: Disable mysql module RHEL
+  ansible.builtin.command: dnf -y module reset mysql
+  ignore_errors: true
 
-  - name: Disable mysql module RHEL
-    shell: dnf -y module disable mysql
-    ignore_errors: true
+- name: Disable mysql module RHEL
+  ansible.builtin.command: dnf -y module disable mysql
+  ignore_errors: true
 
-  - name: Import key for percona
-    ansible.builtin.rpm_key:
-      state: present
-      #key: https://repo.percona.com/yum/RPM-GPG-KEY-Percona
-      key: https://repo.percona.com/yum/PERCONA-PACKAGING-KEY
-     
-  - name: Install the percona repo
-    ansible.builtin.dnf:
-      name: 'https://repo.percona.com/yum/percona-release-latest.noarch.rpm'
-      state: present
-    
-  - name: Setup percona Release 8.4 LTS
-    shell: percona-release setup pxc-84-lts
-    ignore_errors: true
-    
-  - name: Install percona-xtradb-cluster
-    ignore_errors: true
-    shell: dnf install percona-xtradb-cluster -y
+- name: Import key for percona
+  ansible.builtin.rpm_key:
+    state: present
+    key: https://repo.percona.com/yum/PERCONA-PACKAGING-KEY
 
-  - name: enable pxb-84-lts repo for xtrabackup-84
-    ignore_errors: true
-    shell: percona-release enable pxb-84-lts
+- name: Install the percona repo
+  ansible.builtin.dnf:
+    name: 'https://repo.percona.com/yum/percona-release-latest.noarch.rpm'
+    state: present
 
-  - name: Install percona-xtrabackup 84
-    ignore_errors: true
-    shell: dnf install percona-xtrabackup-84 -y
+- name: Setup percona Release 8.4 LTS
+  ansible.builtin.command: percona-release setup pxc-84-lts
+  ignore_errors: true
 
-  - name: Enable firewall rules for percona-xtradb
-    ansible.posix.firewalld:
-      port: 3306/tcp
-      permanent: true
-      immediate: true
-      state: enabled
-      
-  - name: Enable firewall rules for percona-xtradb
-    ansible.posix.firewalld:
-      port: 4444/tcp
-      permanent: true
-      immediate: true
-      state: enabled
+- name: Install percona-xtradb-cluster
+  ignore_errors: true
+  ansible.builtin.command: dnf install percona-xtradb-cluster -y
 
-  - name: Enable firewall rules for percona-xtradb
-    ansible.posix.firewalld:
-      port: 4567/udp
-      permanent: true
-      immediate: true
-      state: enabled
+- name: Enable pxb-84-lts repo for xtrabackup-84
+  ignore_errors: true
+  ansible.builtin.command: percona-release enable pxb-84-lts
 
-  - name: Enable firewall rules for percona-xtradb
-    ansible.posix.firewalld:
-      port: 4567-4568/tcp
-      permanent: true
-      immediate: true
-      state: enabled
+- name: Install percona-xtrabackup 84
+  ignore_errors: true
+  ansible.builtin.command: dnf install percona-xtrabackup-84 -y
 
-  - name: Enable firewall rules for percona-xtradb
-    ansible.posix.firewalld:
-      port: 4567-4568/tcp
-      permanent: true
-      immediate: true
-      state: enabled
+- name: Enable firewall rules for percona-xtradb
+  ansible.posix.firewalld:
+    port: 3306/tcp
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Enable firewall rules for percona-xtradb
+  ansible.posix.firewalld:
+    port: 4444/tcp
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Enable firewall rules for percona-xtradb
+  ansible.posix.firewalld:
+    port: 4567/udp
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Enable firewall rules for percona-xtradb
+  ansible.posix.firewalld:
+    port: 4567-4568/tcp
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Enable firewall rules for percona-xtradb
+  ansible.posix.firewalld:
+    port: 4567-4568/tcp
+    permanent: true
+    immediate: true
+    state: enabled
 
 
-  - name: initialize database on node 02/03
-    shell: /usr/sbin/mysqld --initialize --user=mysql
-    ignore_errors: true
-    when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
+- name: Initialize database on node 02/03
+  ansible.builtin.command: /usr/sbin/mysqld --initialize --user=mysql
+  ignore_errors: true
+  when: ansible_hostname in [var_group.percona_node_02_short_name,var_group.percona_node_03_short_name]
 
-  - name: Ensure MYSQL Service is stopped in all nodes.
-    ansible.builtin.service:
-      name: mysql
-      state: stopped
+- name: Ensure MYSQL Service is stopped in all nodes.
+  ansible.builtin.service:
+    name: mysql
+    state: stopped
