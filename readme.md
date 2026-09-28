@@ -1,193 +1,203 @@
-# OpenTofu + Ansible Percona XtraDB Cluster Lab
+# OpenTofu + Ansible Percona XtraDB Cluster 8.4 Lab
 
-A local Infrastructure as Code and configuration-management project that provisions a three-node AlmaLinux virtual environment on QEMU/KVM with OpenTofu and libvirt, then configures a Percona XtraDB Cluster (PXC) with Ansible.
+A local infrastructure automation portfolio project that provisions three AlmaLinux 9 virtual machines on QEMU/KVM with OpenTofu and the `dmacvicar/libvirt` provider, waits for SSH availability, installs project-local Ansible collection dependencies, and then runs Ansible to build an encrypted three-node Percona XtraDB Cluster (PXC) 8.4 LTS.
 
-The project demonstrates a complete local automation workflow: VM provisioning, cloud-init bootstrap, static networking, SSH key authentication, Percona installation, Galera/PXC bootstrap, certificate distribution, database initialization, SSH hardening, and optional HashiCorp Vault/keyring integration.
+The repository demonstrates an end-to-end local workflow that combines infrastructure provisioning, cloud-init, static networking, configuration management, PXC/Galera bootstrap, TLS-encrypted cluster traffic, SST encryption, SELinux-aware configuration, firewall automation, Ansible Vault, and automated handoff from OpenTofu to Ansible.
 
-## Project Goals
+## Current Implementation at a Glance
 
-This repository is designed as a portfolio lab for demonstrating practical experience with:
+| Layer | Current implementation |
+| --- | --- |
+| Hypervisor | QEMU/KVM through libvirt |
+| IaC | OpenTofu |
+| Provider | `dmacvicar/libvirt` 0.9.9 (locked in `.terraform.lock.hcl`) |
+| Guest OS | AlmaLinux 9 golden QCOW2 image |
+| Provisioning | cloud-init with static networking and SSH key authentication |
+| Configuration management | Ansible |
+| Database | Percona XtraDB Cluster 8.4 LTS |
+| SST tooling | Percona XtraBackup 8.4 |
+| Replication | Galera / wsrep |
+| Cluster encryption | Self-signed CA + shared server certificate/key |
+| SST encryption | `encrypt=4` |
+| Authentication plugin for MaxScale account | `caching_sha2_password` |
+| Firewall | firewalld |
+| Mandatory access control | SELinux retained; `mysql_connect_any` enabled on node 01 |
+| Secrets | Ansible Vault file referenced by the playbook |
+| IaC -> configuration handoff | `terraform_data.wait_for_ssh` -> `terraform_data.run_ansible` |
 
-- OpenTofu Infrastructure as Code
-- QEMU/KVM and libvirt virtualization
-- QCOW2 golden-image based provisioning
-- AlmaLinux cloud images and cloud-init
-- Static Linux networking
-- SSH public-key authentication
-- Ansible inventories, variables, roles, templates, and Vault
-- Percona XtraDB Cluster 8.0
-- Galera cluster bootstrap and node joining
-- MySQL/PXC firewall requirements
-- TLS certificate distribution between database nodes
-- SELinux-aware automation
-- SSH hardening and delegated administrative access
-- HashiCorp Vault integration patterns for database key management
-- Git-based infrastructure lifecycle management
+## What the Project Demonstrates
+
+- OpenTofu resource orchestration with `for_each`
+- QEMU/KVM and libvirt domain provisioning
+- QCOW2 golden-image cloning
+- Q35 virtual machines with host-passthrough CPU
+- per-node cloud-init ISO generation
+- static IPv4 configuration through cloud-init network data
+- SSH key-only guest access
+- automatic SSH readiness checks from OpenTofu
+- automatic Ansible collection installation
+- automatic Ansible execution from OpenTofu
+- PXC 8.4 LTS installation and Galera configuration
+- three-node wsrep topology
+- self-signed TLS certificate generation on the bootstrap node
+- TLS certificate distribution to all cluster members
+- encrypted Galera traffic and encrypted XtraBackup SST
+- PXC bootstrap through `mysql@bootstrap.service`
+- `caching_sha2_password` account creation for the MaxScale service account
+- firewalld configuration for PXC/Galera ports
+- SELinux-aware file context restoration
+- Ansible Vault-based credential loading
 
 ## Architecture
 
-The current implementation provisions three virtual machines from the same AlmaLinux golden image and attaches them to an existing libvirt network named `LAN` by default.
-
 ```text
-                                  Git Repository
-                                       |
-                     +-----------------+-----------------+
-                     |                                   |
-                     v                                   v
-               OpenTofu / libvirt                    Ansible
-                     |                                   |
-                     | provision                         | configure
-                     v                                   v
-              QEMU/KVM Hypervisor                PXC configuration
-                     |
-                  Existing
-               libvirt network
-                    LAN
-                     |
-        +------------+------------+
-        |            |            |
-        v            v            v
-+---------------+ +---------------+ +---------------+
-| PERCDBTEST01  | | PERCDBTEST02  | | PERCDBTEST03  |
-| 10.20.10.10   | | 10.20.10.11   | | 10.20.10.12   |
-| 2 vCPU        | | 2 vCPU        | | 2 vCPU        |
-| 2 GiB RAM     | | 2 GiB RAM     | | 2 GiB RAM     |
-+-------+-------+ +-------+-------+ +-------+-------+
-        |                 |                 |
-        +-----------------+-----------------+
-                          |
-                          v
-              Percona XtraDB Cluster 8.0
+                           OpenTofu
+                               |
+            +------------------+------------------+
+            |                                     |
+            v                                     v
+   libvirt/QEMU/KVM                    terraform_data.wait_for_ssh
+            |                                     |
+            v                                     v
+  3 AlmaLinux 9 VMs                     TCP/22 readiness check
+            |                                     |
+            +------------------+------------------+
+                               |
+                               v
+                    terraform_data.run_ansible
+                               |
+                 install requirements.yml
+                               |
+                               v
+                       ansible-playbook
+                               |
+             +-----------------+-----------------+
+             |                 |                 |
+             v                 v                 v
+      PERCDBTEST01      PERCDBTEST02      PERCDBTEST03
+       10.20.10.10       10.20.10.11       10.20.10.12
+             |                 |                 |
+             +-----------------+-----------------+
+                               |
+                               v
+                  PXC 8.4 / Galera Cluster
+                   TLS-encrypted replication
 ```
 
-## Provisioning Flow
+## Node Topology
+
+The current `Tofu/terraform.tfvars` and Ansible variable files define:
+
+| Node | IP | Prefix | vCPU | RAM | Server ID |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `PERCDBTEST01` | `10.20.10.10` | `/24` | 2 | 2048 MiB | 1 |
+| `PERCDBTEST02` | `10.20.10.11` | `/24` | 2 | 2048 MiB | 2 |
+| `PERCDBTEST03` | `10.20.10.12` | `/24` | 2 | 2048 MiB | 3 |
+
+Current environment values:
+
+- domain: `lab.local`
+- gateway: `10.20.10.1`
+- DNS: `8.8.8.8`, `8.8.4.4`
+- existing libvirt network: `LAN`
+- libvirt storage pool: `Virtual_Machines`
+- wsrep cluster name: `PERCDBTESTCLU01`
+- golden image currently referenced by `storage.tf`: `/home/gesora/Templates/al9-golden-build.qcow2`
+
+The OpenTofu code consumes an **existing** libvirt network and storage pool. It does not create them.
+
+## End-to-End Deployment Flow
+
+The current code executes this workflow:
 
 ```text
-AlmaLinux Golden QCOW2
-          |
-          v
-OpenTofu libvirt_volume
-          |
-          +--> PERCDBTEST01-disk.qcow2
-          +--> PERCDBTEST02-disk.qcow2
-          +--> PERCDBTEST03-disk.qcow2
-          |
-          v
-Cloud-init ISO per VM
-          |
-          +--> hostname / FQDN
-          +--> static IPv4
-          +--> default gateway
-          +--> DNS servers
-          +--> DNS search domain
-          +--> almalinux user
-          +--> SSH public key
-          +--> password SSH disabled
-          |
-          v
-libvirt_domain
-          |
-          v
-Running AlmaLinux VMs
-          |
-          v
-Ansible
-          |
-          +--> prerequisites
-          +--> Percona installation
-          +--> bootstrap node 01
-          +--> distribute certificates
-          +--> start nodes 02 and 03
-          +--> SSH hardening
+1. OpenTofu creates VM QCOW2 volumes
+2. OpenTofu creates a cloud-init disk per VM
+3. OpenTofu creates and starts all three libvirt domains
+4. terraform_data.wait_for_ssh checks TCP/22 on every VM
+5. terraform_data.run_ansible installs collections from requirements.yml
+6. terraform_data.run_ansible launches main.yml
+7. prerequisites_install prepares each AlmaLinux host
+8. percona_install installs PXC 8.4 and XtraBackup 8.4
+9. percona_bootstraper:
+   - generates cluster TLS material on node 01
+   - fetches TLS files to the controller
+   - distributes runtime TLS files
+   - renders encrypted PXC configuration
+   - bootstraps node 01
+   - sets the root password
+   - creates maxscaleusr with caching_sha2_password
+10. certificates_copy repeats runtime certificate synchronization to nodes 02/03
+11. database_init_start starts nodes 02/03
+12. database_init_start stops bootstrap mode on node 01 and starts normal mysql
+13. gathered Ansible facts are cleared
 ```
 
-## Infrastructure Topology
+For deeper detail, see:
 
-The current OpenTofu variable set defines the following nodes:
-
-| Node | IPv4 address | Prefix | vCPU | Memory |
-| --- | --- | ---: | ---: | ---: |
-| `PERCDBTEST01` | `10.20.10.10` | `/24` | 2 | 2048 MiB |
-| `PERCDBTEST02` | `10.20.10.11` | `/24` | 2 | 2048 MiB |
-| `PERCDBTEST03` | `10.20.10.12` | `/24` | 2 | 2048 MiB |
-
-The current environment values also define:
-
-- Gateway: `10.20.10.1`
-- Guest DNS: `8.8.8.8`, `8.8.4.4`
-- Cloud-init search domain: `lab.local`
-- Existing libvirt network: `LAN`
-- Default libvirt storage pool: `Virtual_Machines`
-- Golden image: `al9-golden-build.qcow2`
-
-The infrastructure code does not create the `LAN` network. It expects that network to exist in libvirt before deployment.
-
-## Technology Stack
-
-| Technology | Role in the project |
-| --- | --- |
-| OpenTofu | Infrastructure provisioning and lifecycle management |
-| dmacvicar/libvirt provider | Interface between OpenTofu and libvirt |
-| QEMU/KVM | Local virtualization platform |
-| libvirt | VM, storage, disk, network-interface, and domain management |
-| QCOW2 | Golden image and VM disk format |
-| AlmaLinux 9 | Guest operating system |
-| cloud-init | First-boot guest identity, networking, and SSH configuration |
-| Ansible | OS and application configuration |
-| Percona XtraDB Cluster 8.0 | Synchronous multi-node MySQL-compatible cluster |
-| Galera/wsrep | Replication and cluster membership layer used by PXC |
-| firewalld | Host firewall configuration |
-| SELinux | Mandatory access control retained by the guest configuration |
-| Ansible Vault | Encrypted secrets storage |
-| HashiCorp Vault | Optional keyring/token integration present in the project |
+- [Architecture](docs/ARCHITECTURE.md)
+- [OpenTofu implementation](docs/OPENTOFU.md)
+- [Ansible implementation](docs/ANSIBLE.md)
+- [Deployment guide](docs/DEPLOYMENT.md)
+- [Security and secrets](docs/SECURITY.md)
+- [Troubleshooting and current caveats](docs/TROUBLESHOOTING.md)
 
 ## Repository Structure
+
+The delivered repository currently contains:
 
 ```text
 portfolio-qemu-pxc-cluster/
 ├── readme.md
+├── docs/
+│   ├── ARCHITECTURE.md
+│   ├── ANSIBLE.md
+│   ├── DEPLOYMENT.md
+│   ├── OPENTOFU.md
+│   ├── SECURITY.md
+│   └── TROUBLESHOOTING.md
 ├── Ansible/
+│   ├── .gitignore
+│   ├── .vault_pass                 # present in delivered archive; do not publish
 │   ├── ansible.cfg
 │   ├── inventory.yml
 │   ├── main.yml
+│   ├── requirements.yml
 │   ├── group_vars/
 │   │   ├── all.yaml
 │   │   └── deploy_info.yaml
-│   ├── host_vars/
 │   ├── secrets/
-│   │   └── secrets.yml
+│   │   └── secrets.yml             # Ansible Vault encrypted
 │   ├── templates/
 │   │   ├── encryption-percona-node-01.cnf.j2
 │   │   ├── encryption-percona-node-02.cnf.j2
-│   │   ├── encryption-percona-node-03.cnf.j2
-│   │   ├── node-01-keyring-vault.conf.j2
-│   │   ├── node-02-keyring-vault.conf.j2
-│   │   ├── node-03-keyring-vault.conf.j2
-│   │   └── vault-token-rotation.sh.j2
+│   │   └── encryption-percona-node-03.cnf.j2
 │   └── roles/
 │       ├── prerequisites_install/
 │       ├── percona_install/
 │       ├── percona_bootstraper/
 │       ├── certificates_copy/
-│       ├── database_init_start/
-│       ├── ssh_permissions/
-│       ├── vault_agent/
-│       └── keyring_install/
+│       └── database_init_start/
 └── Tofu/
+    ├── .gitignore
     ├── .terraform.lock.hcl
-    ├── providers.tf
-    ├── vars.tf
-    ├── storage.tf
+    ├── apply.sh
+    ├── destroy.sh
     ├── cloud-init.tf
-    ├── vm.tf
-    └── terraform.tfvars
+    ├── providers.tf
+    ├── storage.tf
+    ├── terraform.tfvars            # present in delivered archive
+    ├── vars.tf
+    └── vm.tf
 ```
+
+The delivered archive also contains local `.terraform/`, `terraform.tfstate`, and `terraform.tfstate.backup` artifacts. These are runtime/local-state files rather than source documentation and should not be published in a clean portfolio repository.
 
 ## OpenTofu Design
 
 ### Provider
 
-The project uses the `dmacvicar/libvirt` provider.
+The repository declares:
 
 ```hcl
 terraform {
@@ -199,11 +209,13 @@ terraform {
 }
 ```
 
-The connection URI is not hardcoded in the current provider configuration, so the active libvirt connection is determined by the environment/provider defaults used when OpenTofu runs.
+The lock file currently pins `dmacvicar/libvirt` version `0.9.9`.
 
-### VM Definition
+No provider URI is declared in the delivered `providers.tf`; therefore the effective libvirt connection is determined by the provider/environment defaults at runtime.
 
-VMs are generated dynamically from the `VMS` map:
+### VM Creation
+
+`var.VMS` drives all node creation:
 
 ```hcl
 variable "VMS" {
@@ -217,433 +229,208 @@ variable "VMS" {
 }
 ```
 
-This lets the same OpenTofu resources create all cluster nodes through `for_each`.
+OpenTofu uses the map with `for_each` to create:
 
-### Golden Image and VM Storage
-
-Each VM gets an individual QCOW2 volume populated from the AlmaLinux golden image.
-
-Current source image:
-
-```text
-/home/gesora/Templates/al9-golden-build.qcow2
-```
-
-The generated disk naming convention is:
-
-```text
-PERCDBTEST01-disk.qcow2
-PERCDBTEST02-disk.qcow2
-PERCDBTEST03-disk.qcow2
-```
-
-The disks are stored in the configured libvirt pool and use `virtio` as the guest disk bus.
+- one QCOW2 disk per VM
+- one cloud-init disk per VM
+- one libvirt domain per VM
 
 ### VM Hardware
 
-Each `libvirt_domain` currently uses:
+The delivered `libvirt_domain` configuration uses:
 
-- KVM virtualization
-- x86_64 architecture
-- Q35 machine type
-- host-passthrough CPU mode
+- KVM
+- x86_64
+- Q35
+- host-passthrough CPU
 - ACPI
-- VirtIO disk and network devices
+- VirtIO OS disk
+- VirtIO network adapter
 - SATA cloud-init CD-ROM
-- VNC bound to `127.0.0.1`
+- VNC listening on `127.0.0.1`
 - VirtIO video
+- `running = true`
+- `autostart = false`
 
-The domain is started automatically after creation, while libvirt autostart is disabled.
+### Cloud-init
 
-## Cloud-init Configuration
+The cloud-init configuration creates the `almalinux` user with:
 
-A separate cloud-init disk is generated for every VM.
+- locked password
+- passwordless sudo
+- `wheel` membership
+- `/bin/bash`
+- SSH public key from `var.vm_ssh_public_key`
+- SSH password authentication disabled
+- root disabled through cloud-init
 
-Cloud-init configures:
+Network configuration is static and includes the configured IP/prefix, default route, Google DNS servers, and `vm_domain_name` as the DNS search domain.
 
-- hostname
-- FQDN
-- `/etc/hosts` management
-- `almalinux` administrative account
-- passwordless sudo for the `wheel` user
-- SSH public-key authentication
-- disabled SSH password authentication
-- disabled root login configuration through cloud-init
-- static IPv4 addressing
-- default route
-- DNS servers
-- DNS search domain
+### Automatic Ansible Handoff
 
-### SSH Authentication
+After the VM domains exist, `terraform_data.wait_for_ssh` loops over all VM IP addresses and waits until `nc` can connect to TCP/22.
 
-The VM account is configured for key-based authentication only:
+Then `terraform_data.run_ansible`:
 
-```text
-User: almalinux
-Password SSH: disabled
-SSH key: supplied through vm_ssh_public_key
-```
+1. changes into `../Ansible`
+2. runs `ansible-galaxy collection install -r ./requirements.yml -p ./collections`
+3. runs `ansible-playbook -i ./inventory.yml ./main.yml`
 
-The account password is locked and `ssh_pwauth` is disabled.
+Its current replacement triggers are:
 
-### Guest Networking
+- hash of `var.VMS`
+- hash of `Ansible/requirements.yml`
+- hash of `Ansible/main.yml`
 
-Each guest receives its address from the `VMS` variable map. The cloud-init network configuration uses `eth0` with DHCP disabled.
-
-Example:
-
-```text
-PERCDBTEST01
-IP:      10.20.10.10/24
-Gateway: 10.20.10.1
-DNS:     8.8.8.8, 8.8.4.4
-Domain:  lab.local
-```
-
-The resulting FQDN is generated from the node name plus `vm_domain_name`.
-
-Example:
-
-```text
-PERCDBTEST01.lab.local
-```
+Changes only inside a role or template are **not** included in those triggers.
 
 ## Ansible Design
 
-The Ansible inventory defines the same three cluster nodes provisioned by OpenTofu:
+### Inventory
+
+The inventory contains one `pxc` group with all three nodes. Ansible connects as:
 
 ```text
-PERCDBTEST01 -> 10.20.10.10
-PERCDBTEST02 -> 10.20.10.11
-PERCDBTEST03 -> 10.20.10.12
+user: almalinux
+private key: ~/.ssh/id_ed25519
 ```
 
-Ansible connects as:
+### Main Playbook
+
+`Ansible/main.yml` executes these roles in order:
+
+1. `prerequisites_install`
+2. `percona_install`
+3. `percona_bootstraper`
+4. `certificates_copy`
+5. `database_init_start`
+6. clear gathered facts
+
+There are no active `ssh_permissions`, `vault_agent`, or `keyring_install` roles in the delivered repository.
+
+### PXC Version
+
+The installation role explicitly runs:
 
 ```text
-ansible_user: almalinux
-SSH key: ~/.ssh/id_ed25519
+percona-release setup pxc-84-lts
+percona-release enable pxb-84-lts
+dnf install percona-xtradb-cluster -y
+dnf install percona-xtrabackup-84 -y
 ```
 
-The project-local `ansible.cfg` disables host-key checking, which is useful for this disposable lab because VM SSH host keys can change when the nodes are recreated.
+Therefore this repository documents **PXC 8.4 LTS**, not PXC 8.0.
 
-## Ansible Deployment Sequence
+### PXC/Galera Configuration
 
-`Ansible/main.yml` currently executes the configuration in this order:
+All three templates configure:
+
+- `default_storage_engine=InnoDB`
+- `wsrep_provider=/usr/lib64/galera4/libgalera_smm.so`
+- identical three-node `wsrep_cluster_address`
+- `wsrep_applier_threads=8`
+- `wsrep_log_conflicts=ON`
+- `innodb_autoinc_lock_mode=2`
+- `pxc_strict_mode=PERMISSIVE`
+- `pxc-encrypt-cluster-traffic=ON`
+- `wsrep_sst_method=xtrabackup-v2`
+- encrypted SST with `encrypt=4`
+
+Each node receives a unique `server-id`, `wsrep_node_address`, and `wsrep_node_name`.
+
+### TLS Workflow
+
+`percona_bootstraper` generates on node 01:
 
 ```text
-1. prerequisites_install
-          |
-          v
-2. percona_install
-          |
-          v
-3. percona_bootstraper
-          |
-          v
-4. certificates_copy
-          |
-          v
-5. database_init_start
-          |
-          v
-6. ssh_permissions
-          |
-          v
-7. clear gathered facts
+/etc/mysql/certs/ca-key.pem
+/etc/mysql/certs/ca.pem
+/etc/mysql/certs/server-key.pem
+/etc/mysql/certs/server-req.pem
+/etc/mysql/certs/server-cert.pem
 ```
 
-Two additional roles are present in the repository but are currently disabled/commented in the main playbook:
+The server certificate is signed by the self-signed cluster CA. The role verifies it with `openssl verify`.
 
-- `vault_agent`
-- `keyring_install`
+Runtime TLS files distributed to the cluster are:
 
-These represent the project’s HashiCorp Vault/keyring integration path and can be enabled when that part of the lab is required.
+```text
+ca.pem
+server-cert.pem
+server-key.pem
+```
 
-## Ansible Roles
+The CA private key remains generated on node 01; it is not part of the `certificates_copy` runtime distribution set.
 
-### `prerequisites_install`
+### MaxScale Service Account
 
-Prepares AlmaLinux for the database deployment by:
+The bootstrap role creates:
 
-- importing the EPEL signing key
-- installing the EPEL repository
-- installing `jq`
-- installing `yum-utils`
-- installing `firewalld`
-- installing `python3-pip`
-- installing the Python `pymysql` module
+```text
+user: maxscaleusr
+host: %
+authentication plugin: caching_sha2_password
+```
 
-### `percona_install`
+The task uses `plugin_auth_string` and a fixed 20-character salt for deterministic `caching_sha2_password` handling.
 
-Installs and prepares Percona XtraDB Cluster 8.0 by:
+## Firewall Ports
 
-- resetting/disabling the default RHEL MySQL module
-- importing the Percona packaging key
-- installing the Percona repository
-- enabling the `pxc-80` repository
-- installing `percona-xtradb-cluster`
-- installing `percona-xtrabackup-80`
-- opening PXC firewall ports
-- initializing MySQL data on nodes 02 and 03
-- ensuring the MySQL service is stopped before cluster bootstrap
+`percona_install` enables:
 
-### PXC Firewall Ports
-
-The role configures the following ports through `firewalld`:
-
-| Port | Protocol | Purpose |
+| Port | Protocol | Use in the code |
 | --- | --- | --- |
-| 3306 | TCP | MySQL client connections |
-| 4444 | TCP | State Snapshot Transfer (SST) |
-| 4567 | TCP/UDP | Galera replication traffic |
-| 4568 | TCP | Incremental State Transfer (IST) |
+| 3306 | TCP | MySQL client traffic |
+| 4444 | TCP | SST |
+| 4567 | UDP | Galera traffic |
+| 4567-4568 | TCP | Galera replication / IST-related traffic |
 
-### `percona_bootstraper`
-
-Configures and bootstraps the cluster.
-
-The role:
-
-- installs node-specific `/etc/my.cnf` templates
-- enables the SELinux `mysql_connect_any` boolean on node 01
-- reloads systemd on the first node
-- starts `mysql@bootstrap.service` on node 01
-- retrieves the temporary MySQL root password
-- sets the configured Percona root password
-- creates a `maxscaleusr` account for load-balancer integration
-
-Cluster-specific values are stored in `group_vars/deploy_info.yaml`, including node addresses, hostnames, short names, and the wsrep cluster name.
-
-### `certificates_copy`
-
-After the bootstrap node has generated the MySQL TLS material, this role:
-
-1. fetches certificates and keys from node 01 to the Ansible controller buffer
-2. copies them to nodes 02 and 03
-3. applies MySQL ownership and file permissions
-4. restores SELinux file contexts
-
-The distributed material includes:
-
-- `ca-key.pem`
-- `ca.pem`
-- `client-cert.pem`
-- `client-key.pem`
-- `private_key.pem`
-- `public_key.pem`
-- `server-cert.pem`
-- `server-key.pem`
-
-### `database_init_start`
-
-Starts the remaining database nodes after bootstrap preparation by:
-
-- creating the MySQL PID file on nodes 02 and 03
-- starting the MySQL service on nodes 02 and 03
-
-This allows the remaining nodes to join the bootstrapped PXC cluster.
-
-### `ssh_permissions`
-
-Implements the project’s additional SSH administration configuration by:
-
-- creating `/home/fpnusr/.ssh`
-- maintaining an `authorized_keys` file
-- distributing multiple approved public keys
-- deploying a templated `sshd_config`
-- applying secure ownership and permissions
-- restoring SELinux context on `sshd_config`
-- granting the `fpnusr` account delegated sudo permissions
-- restarting `sshd`
-
-### `vault_agent`
-
-The repository includes a role for HashiCorp Vault Agent integration. The role is currently not enabled in `main.yml`.
-
-Its implementation includes:
-
-- HashiCorp RPM repository configuration
-- Vault package installation
-- `/opt/vault` directory creation
-- Vault Agent configuration deployment
-- AppRole role ID and secret ID templates
-- custom systemd units
-- token-rotation service support
-
-### `keyring_install`
-
-The repository also includes a keyring integration role, currently disabled in the main playbook.
-
-It contains automation for:
-
-- node-specific encryption configuration
-- `keyring_vault.conf`
-- Vault token retrieval
-- keyring token injection
-- token-rotation scheduling
-- Vault Agent startup
-- SELinux context restoration
-
-This demonstrates an intended database-at-rest encryption integration path using HashiCorp Vault.
-
-## Secrets Management
-
-`Ansible/secrets/secrets.yml` is stored in Ansible Vault format (`AES256`) and is referenced by the playbook for database credentials.
-
-To edit it:
-
-```bash
-ansible-vault edit secrets/secrets.yml
-```
-
-To view it when authorized:
-
-```bash
-ansible-vault view secrets/secrets.yml
-```
-
-To run the playbook interactively with a Vault password:
-
-```bash
-ansible-playbook main.yml --ask-vault-pass
-```
-
-A Vault password file may also be used locally, but it must never be committed to Git.
-
-## Required Ansible Collections
-
-The current roles use modules from these collections:
-
-```text
-ansible.posix
-community.mysql
-community.general
-```
-
-They can be installed with:
-
-```bash
-ansible-galaxy collection install ansible.posix community.mysql community.general
-```
-
-## Prerequisites
-
-The virtualization host should provide:
-
-- Linux with KVM support
-- QEMU
-- libvirt
-- an existing libvirt storage pool
-- an existing libvirt network matching `vm_network_name`
-- OpenTofu
-- Ansible
-- Python 3
-- SSH client
-- an SSH key pair
-- a prepared AlmaLinux 9 golden QCOW2 image
-
-Verify virtualization support:
-
-```bash
-lsmod | grep kvm
-```
-
-Verify libvirt networks:
-
-```bash
-virsh net-list --all
-```
-
-Verify storage pools:
-
-```bash
-virsh pool-list --all
-```
+The `4567-4568/tcp` task is currently present twice in the role.
 
 ## Deployment
 
-### 1. Clone the repository
+### Host prerequisites inferred from the code
+
+The machine running OpenTofu/Ansible needs:
+
+- OpenTofu
+- Ansible
+- QEMU/KVM and libvirt
+- an existing libvirt network matching `vm_network_name`
+- an existing libvirt storage pool matching `vm_pool_name`
+- the AlmaLinux golden QCOW2 image referenced by `storage.tf`
+- SSH client/key pair
+- `nc`/netcat because `wait_for_ssh` calls `nc -z -w 2`
+- network reachability to all VM addresses
+
+### Normal workflow
+
+From the `Tofu` directory:
 
 ```bash
-git clone https://github.com/gesandovalr/portfolio-qemu-pxc-cluster.git
-cd portfolio-qemu-pxc-cluster
-```
-
-### 2. Prepare OpenTofu variables
-
-The project expects environment-specific values through `terraform.tfvars`, including:
-
-- storage pool name/path
-- golden image path
-- SSH public key
-- existing libvirt network name
-- domain name
-- gateway
-- VM definitions
-
-Do not commit real `.tfvars` files containing environment-specific or sensitive data.
-
-### 3. Initialize OpenTofu
-
-```bash
-cd Tofu
 tofu init
-```
-
-### 4. Validate
-
-```bash
-tofu fmt -check
-tofu validate
-```
-
-### 5. Review the plan
-
-```bash
 tofu plan
-```
-
-### 6. Provision the VMs
-
-```bash
 tofu apply
 ```
 
-OpenTofu creates the VM disks, per-node cloud-init ISO volumes, and libvirt domains.
+With the current design, `tofu apply` is intended to provision the VMs **and then run Ansible automatically**. A separate manual `ansible-playbook` step is not part of the intended automated path.
 
-### 7. Validate SSH
-
-After cloud-init finishes:
+The repository also provides:
 
 ```bash
-ssh almalinux@10.20.10.10
-ssh almalinux@10.20.10.11
-ssh almalinux@10.20.10.12
+./apply.sh
+./destroy.sh
 ```
 
-### 8. Validate Ansible connectivity
+`apply.sh` runs `tofu apply`.
 
-```bash
-cd ../Ansible
-ansible all -m ping
-```
+`destroy.sh` runs `tofu destroy`, then removes SSH known-host entries for the three hard-coded lab IPs.
 
-Expected result for all three nodes:
+See [DEPLOYMENT.md](docs/DEPLOYMENT.md) before running the delivered archive because it contains two current path/dependency caveats that affect portability.
 
-```text
-SUCCESS => ping: pong
-```
+## Validation
 
-### 9. Run the configuration playbook
-
-```bash
-ansible-playbook main.yml --ask-vault-pass
-```
-
-### 10. Validate the PXC cluster
-
-After deployment, connect to MySQL on the bootstrap node and inspect wsrep status:
+Useful post-deployment checks are:
 
 ```sql
 SHOW STATUS LIKE 'wsrep_cluster_size';
@@ -651,143 +438,84 @@ SHOW STATUS LIKE 'wsrep_cluster_status';
 SHOW STATUS LIKE 'wsrep_local_state_comment';
 ```
 
-For a healthy three-node cluster, the expected cluster size is `3` and the cluster status should report `Primary`.
+A completed three-node deployment should normally show cluster size `3`; this expectation is operational validation rather than something enforced by the current automation.
 
-## Infrastructure Lifecycle
+The repository does not currently contain an automated wsrep health-check task after startup.
 
-```text
-tofu init
-    |
-    v
-tofu validate
-    |
-    v
-tofu plan
-    |
-    v
-tofu apply
-    |
-    v
-cloud-init
-    |
-    v
-ansible all -m ping
-    |
-    v
-ansible-playbook main.yml
-    |
-    v
-PXC validation
-    |
-    v
-tofu destroy
-```
+## Security and Publication Notes
 
-To remove the provisioned VM infrastructure:
+The implementation includes several security-oriented choices:
 
-```bash
-cd Tofu
-tofu destroy
-```
+- SSH password authentication disabled by cloud-init
+- root disabled through cloud-init
+- key-based Ansible SSH access
+- encrypted Ansible Vault file
+- PXC replication encryption
+- encrypted SST
+- explicit private-key permissions
+- SELinux context restoration for TLS material
+- firewalld rules limited to required PXC/Galera ports
+- `caching_sha2_password` for the MaxScale account
 
-## Security Model
+However, the **delivered ZIP itself** contains local/runtime artifacts that should not be published:
 
-The current project contains several security-focused implementation choices:
+- `Ansible/.vault_pass`
+- `Tofu/terraform.tfstate`
+- `Tofu/terraform.tfstate.backup`
+- `Tofu/.terraform/`
+- `Tofu/terraform.tfvars`
 
-- SSH password authentication disabled during cloud-init
-- root access disabled through cloud-init configuration
-- SSH public-key authentication
-- Ansible Vault encrypted secret file
-- SELinux-aware file-context restoration
-- SELinux boolean configuration for MySQL network access where required
-- firewalld restrictions for PXC services
-- database TLS certificate propagation
-- dedicated administrative SSH configuration
-- optional Vault Agent and database keyring integration
+The ignore files indicate these are intended to remain local. See [SECURITY.md](docs/SECURITY.md).
 
-## Git and Sensitive Files
+## Current Code Caveats
 
-The `Tofu/.gitignore` excludes:
+The documentation intentionally records the code exactly as delivered. Important current mismatches are:
 
-```text
-*.tfstate
-*.tfstate.*
-.terraform/
-*.tfvars
-*.tfvars.json
-```
+1. `Tofu/providers.tf` sets:
 
-The `Ansible/.gitignore` excludes the `secrets/` directory.
+   ```text
+   ANSIBLE_CONFIG=${path.module}/../Ansible/config/ansible.cfg
+   ```
 
-Terraform/OpenTofu state files and real `.tfvars` files should not be published because state can contain infrastructure metadata and sensitive values.
+   but the delivered archive contains `Ansible/ansible.cfg`, not `Ansible/config/ansible.cfg`.
 
-The project archive currently contains local state and environment-specific files, so before publishing a clean portfolio repository, verify Git history as well as the working tree.
+2. `Ansible/requirements.yml` installs `ansible.mysql`, while `percona_bootstraper` currently invokes:
 
-Recommended checks:
+   ```text
+   community.mysql.mysql_user
+   ```
 
-```bash
-git ls-files | grep -E 'tfstate|terraform.tfvars|Ansible/secrets'
-```
+   and the playbook also uses `ansible.posix` modules. A clean machine therefore needs the module-resolution/dependency path reconciled or those collections available elsewhere.
 
-If state was previously committed, removing it from `.gitignore` alone is not sufficient; it should also be removed from Git history and any exposed credentials should be rotated.
+3. OpenTofu's Ansible trigger hashes `main.yml` and `requirements.yml`, but not role/task/template files. Role-only changes may not cause `terraform_data.run_ansible` to be replaced automatically.
 
-## Current Implementation Notes
+4. `storage.tf` currently hard-codes the golden-image URL instead of using the declared `vm_base_image_path` variable.
 
-The documentation above describes what is present in the repository at the time of this scan. A few components are intentionally present but not active in the main deployment path:
+5. `vm_pool_path`, `vm_base_template_name`, `vm_base_image_path`, and `vm_disk_capacity` are declared/configured but are not consumed by the current resource definitions in the delivered code.
 
-- `vault_agent` is currently commented out in `Ansible/main.yml`.
-- `keyring_install` is currently commented out in `Ansible/main.yml`.
-- the OpenTofu configuration consumes an existing libvirt network instead of creating one.
-- the golden image source in `storage.tf` is currently a host-specific absolute path.
-- the current `ansible.cfg` uses a host-specific absolute inventory path.
-
-Those host-specific paths are suitable for the current workstation but should eventually be converted to relative paths or variables if the project is intended to be cloned and executed unchanged on another system.
+These are documented as current implementation facts; this documentation update does not alter application/IaC behavior.
 
 ## Portfolio Skills Demonstrated
 
-This project demonstrates the integration of multiple infrastructure disciplines rather than a single automation tool:
-
 ```text
-Infrastructure as Code
-        +
-Virtualization
-        +
-Linux provisioning
-        +
-Configuration management
-        +
-Database clustering
-        +
-Security hardening
-        +
-Secrets management
-        +
-Operational validation
+OpenTofu / IaC
+      +
+QEMU/KVM + libvirt
+      +
+cloud-init
+      +
+Ansible
+      +
+Linux/firewalld/SELinux
+      +
+Percona XtraDB Cluster 8.4
+      +
+Galera/wsrep
+      +
+TLS certificate automation
+      +
+Ansible Vault
 ```
-
-The primary design principle is separation of responsibilities:
-
-- OpenTofu defines and creates infrastructure.
-- cloud-init performs first-boot guest configuration.
-- Ansible performs repeatable operating-system and database configuration.
-- Ansible Vault protects deployment secrets.
-- PXC provides the database cluster layer.
-
-## Future Improvements
-
-The current codebase already exposes several clear next steps for continued development:
-
-- add an OpenTofu remote backend for state
-- replace host-specific absolute paths with portable variables/relative paths
-- generate Ansible inventory from OpenTofu outputs
-- invoke Ansible automatically after VM provisioning
-- add formal Ansible collection requirements
-- make Vault Agent/keyring integration part of the supported deployment path
-- add explicit PXC health-check automation
-- add MaxScale deployment to complement the existing `maxscaleusr`
-- add automated tests for SSH, MySQL, wsrep, firewall, and service state
-- add CI validation for `tofu fmt`, `tofu validate`, YAML linting, and Ansible syntax checks
-- add architecture screenshots or rendered diagrams to the repository
 
 ## Author
 
@@ -795,6 +523,4 @@ The current codebase already exposes several clear next steps for continued deve
 Sysadmin Engineer  
 Mex Solutions IT
 
----
-
-This repository is a hands-on infrastructure portfolio project built to demonstrate reproducible local virtualization, automated Linux provisioning, and clustered database deployment using OpenTofu and Ansible.
+This repository is a hands-on infrastructure portfolio project demonstrating automated local virtualization and encrypted clustered database deployment with OpenTofu and Ansible.
